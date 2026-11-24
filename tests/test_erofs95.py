@@ -2,7 +2,7 @@
 
 Seams: ext4_manifest (what the trusted ext4 reader sees), build (the repack), erofs_manifest (an
 independent on-disk EROFS reader + fsck extraction), compare (the verdict). Expected values are literals."""
-import os, shutil, subprocess, sys, tarfile, tempfile, unittest
+import os, shutil, struct, subprocess, sys, tarfile, tempfile, unittest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
 import erofs95
 
@@ -102,3 +102,19 @@ class ErofsRoundTripTest(Ext4ManifestTest):
         diffs = erofs95.compare(expected, erofs95.erofs_manifest(lossy, os.path.join(self.d, "rb2")))
         self.assertIn("/bin/tool: xattrs differ", diffs)
         self.assertIn("/: xattrs differ", diffs)
+
+    def test_verify_reports_data_less_compressed_inode_even_when_fsck_exits_0(self):
+        work, out = os.path.join(self.d, "work"), os.path.join(self.d, "bad.erofs")
+        expected = erofs95.build(self.img, out, work)
+        fs = erofs95.ErofsImage(out)   # turn /bin/tool into what 1.7.1 emitted: compressed layout, 0 blocks
+        pos = fs.inode(dict(fs.children(fs.inode(dict(fs.children(fs.inode(fs.root)))["bin"])))["tool"])["pos"]
+        fs.close()
+        with open(out, "r+b") as f:
+            fmt = struct.unpack("<H", os.pread(f.fileno(), 2, pos))[0]
+            os.pwrite(f.fileno(), struct.pack("<H", (fmt & ~0xE) | (3 << 1)), pos)
+            os.pwrite(f.fileno(), bytes(4), pos + 16)
+        r = erofs95.verify(expected, out, os.path.join(self.d, "rb"))
+        self.assertIn(r["verdict"], ("MISMATCH", "FSCK_FAILED"))  # 1.7.1 fsck exits 0 here; newer may fail
+        self.assertEqual(r["compressed_without_data"], ["/bin/tool", "/bin/tool-link"])
+        if r["verdict"] == "MISMATCH":
+            self.assertIn("/bin/tool: sha256 differ", r["differences"])

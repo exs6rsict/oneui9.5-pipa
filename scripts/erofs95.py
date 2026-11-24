@@ -262,25 +262,40 @@ class ErofsImage:
                     yield name, nid
 
 
-def erofs_manifest(img, scratch):
-    """Manifest of an EROFS image in ext4_manifest's shape: metadata from ErofsImage, file hashes from
-    fsck.erofs --extract (which also checks every file decodes)."""
+def walk(fs):
+    """(path, nid, inode) for every inode reachable from the root, depth-first."""
+    todo = [("/", fs.root)]
+    while todo:
+        path, nid = todo.pop()
+        ino = fs.inode(nid)
+        yield path, nid, ino
+        if stat.S_ISDIR(ino["mode"]):
+            todo += [(path.rstrip("/") + "/" + n, c) for n, c in fs.children(ino)]
+
+
+def compressed_without_data(img):
+    """Regular files whose inode says compressed but owns 0 compressed blocks: the erofs-utils 1.7.1 loss."""
+    fs = ErofsImage(img)
+    try:
+        return sorted(p for p, _nid, i in walk(fs) if stat.S_ISREG(i["mode"]) and i["layout"] in (1, 3)
+                      and i["iu"] == 0 and i["size"] > 0)
+    finally:
+        fs.close()
+
+
+def erofs_metadata(img):
+    """Manifest of an EROFS image in ext4_manifest's shape, without content hashes (ErofsImage only)."""
     fs, manifest, seen = ErofsImage(img), {}, {}
     try:
-        todo = [("/", fs.root)]
-        while todo:
-            path, nid = todo.pop()
-            ino = fs.inode(nid)
+        for path, nid, ino in walk(fs):
             kind = KINDS.get(stat.S_IFMT(ino["mode"]))
             if kind is None:
                 raise ValueError(f"unexpected inode type {ino['mode']:o} at {path!r}")
             e = {"kind": kind, "mode": ino["mode"] & 0o7777, "uid": ino["uid"], "gid": ino["gid"],
                  "xattrs": {n: v.hex() for n, v in sorted(fs.xattrs(ino).items())}}
-            if kind == "dir":
-                todo += [(path.rstrip("/") + "/" + n, c) for n, c in fs.children(ino)]
-            elif kind == "symlink":
+            if kind == "symlink":
                 e["target"] = fs.data(ino).decode("utf-8", "surrogateescape")
-            else:
+            elif kind == "file":
                 seen.setdefault(nid, []).append(path)
             manifest[path] = e
     finally:
@@ -288,6 +303,12 @@ def erofs_manifest(img, scratch):
     for paths in seen.values():
         for p in sorted(paths)[1:]:
             manifest[p]["hardlink_of"] = sorted(paths)[0]
+    return dict(sorted(manifest.items()))
+
+
+def erofs_manifest(img, scratch):
+    """erofs_metadata plus file hashes from fsck.erofs --extract (which also checks every file decodes)."""
+    manifest = erofs_metadata(img)
     dest = os.path.join(scratch, "extract")
     os.makedirs(scratch, exist_ok=True)
     try:
@@ -295,8 +316,8 @@ def erofs_manifest(img, scratch):
         if r.returncode:
             raise RuntimeError(f"fsck.erofs exit {r.returncode}: {r.stderr.strip()[-800:]}")
         for path, e in manifest.items():
-            if e["kind"] == "file":
-                e["sha256"] = sha256(dest + path)
+            if e["kind"] == "file":  # fsck.erofs 1.7.1 can exit 0 yet skip a data-less file: record, don't crash
+                e["sha256"] = sha256(dest + path) if os.path.isfile(dest + path) else None
     finally:
         for root, dirs, _files in os.walk(dest):  # image dirs such as 0500 would block removal
             for d in dirs:
@@ -304,7 +325,7 @@ def erofs_manifest(img, scratch):
                 if not os.path.islink(p):
                     os.chmod(p, 0o700)
         shutil.rmtree(dest, ignore_errors=True)
-    return dict(sorted(manifest.items()))
+    return manifest
 
 
 def compare(expected, got):
@@ -316,6 +337,24 @@ def compare(expected, got):
             if expected[p].get(field) != got[p].get(field):
                 diffs.append(f"{p}: {field} differ")
     return diffs
+
+
+def verify(expected, out, scratch):
+    """Verdict for an EROFS image against the ext4 manifest. A failed fsck is reported, never raised:
+    the metadata is still compared (without content) and data-less compressed inodes are listed."""
+    try:
+        got = erofs_manifest(out, scratch)
+    except RuntimeError as err:
+        got = erofs_metadata(out)
+        bare = {p: {k: v for k, v in e.items() if k != "sha256"} for p, e in expected.items()}
+        diffs = compare(bare, got)
+        return {"verdict": "FSCK_FAILED", "fsck_error": str(err), "compressed_without_data":
+                compressed_without_data(out), "metadata_differences": diffs[:200],
+                "metadata_difference_count": len(diffs), "manifest": got}
+    diffs = compare(expected, got)
+    return {"verdict": "metadata+content identical" if not diffs else "MISMATCH", "differences": diffs[:200],
+            "difference_count": len(diffs), "compressed_without_data": compressed_without_data(out),
+            "manifest": got}
 
 
 def derived_configs(manifest):
@@ -334,8 +373,8 @@ def main(argv=None):
     img, out, work, report, *readback = argv if argv is not None else sys.argv[1:]
     os.makedirs(report, exist_ok=True)
     expected = build(img, out, work)
-    got = erofs_manifest(out, os.path.join(work, "readback"))
-    diffs = compare(expected, got)
+    v = verify(expected, out, os.path.join(work, "readback"))
+    got = v.pop("manifest")
     fs_config, contexts = derived_configs(expected)
     for name, body in (("fs_config.derived.txt", fs_config), ("file_contexts.derived.txt", contexts)):
         with open(os.path.join(report, name), "w") as f:
@@ -353,16 +392,15 @@ def main(argv=None):
         "with_selinux_label": sum("security.selinux" in e["xattrs"] for e in expected.values()),
         "with_capability": sum("security.capability" in e["xattrs"] for e in expected.values()),
         "hardlinks": sum("hardlink_of" in e for e in expected.values()),
-        "differences": diffs[:200], "difference_count": len(diffs),
         "readback": {p: {"ext4": expected.get(p, {}).get("sha256"), "erofs": got.get(p, {}).get("sha256")}
                      for p in readback},
-        "verdict": "metadata+content identical" if not diffs else "MISMATCH",
+        **v,
         "approval": "NOT APPROVED FOR FLASH",
     }
     with open(os.path.join(report, "result.json"), "w") as f:
         json.dump(result, f, indent=1)
-    print(json.dumps({k: result[k] for k in ("output", "difference_count", "verdict")}))
-    return 1 if diffs else 0
+    print(json.dumps({k: result[k] for k in ("output", "verdict")}))
+    return 0 if result["verdict"] == "metadata+content identical" else 1
 
 
 if __name__ == "__main__":
