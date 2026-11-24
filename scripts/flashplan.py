@@ -10,7 +10,7 @@ import re
 import sys
 
 ALLOWED_RAW = {"boot_a", "vendor_boot_a", "dtbo_a"}           # slot-A boot chain, pipa's own images
-LOGICAL_A = {"system_a", "vendor_a", "odm_a", "product_a", "system_ext_a"}  # in-place, existing extent only
+LOGICAL_A = {"system_a", "vendor_a", "odm_a", "product_a", "system_ext_a"}  # in-place: live extent, or lprelayout.py extent
 PROTECTED_NAMES = re.compile(
     r"^(linux|userdata|metadata|persist|misc|frp|gpt|primarygpt|backupgpt|partition|"
     r"xbl|xbl_config|abl|tz|hyp|aop|keymaster|modem|devcfg|qupfw|uefisecapp|cmnlib|cmnlib64|"
@@ -27,6 +27,14 @@ def sha256(path):
     return h.hexdigest()
 
 
+def lp_sizes(layout):
+    """{name: bytes} from `lpdump -j` (partitions: list, size as str) or the older dict form; no size = 0 B."""
+    parts = (layout or {}).get("partitions", {})
+    if isinstance(parts, dict):
+        return {n: int(v.get("size", 0)) for n, v in parts.items()}
+    return {v["name"]: int(v.get("size", 0)) for v in parts}
+
+
 def check_backup(backup, bad):
     """GPT and live-super LP dumps must exist and match their recorded hashes."""
     layout = None
@@ -40,7 +48,8 @@ def check_backup(backup, bad):
     return layout
 
 
-def validate(plan):
+def validate(plan, extents=None):
+    """extents: {logical_a: bytes} from a separately validated LP re-layout (lprelayout.py); default = live."""
     violations = []
     bad = lambda rule, target, why: violations.append({"rule": rule, "target": target, "why": why})
     if plan.get("slot") != "a":
@@ -62,7 +71,7 @@ def validate(plan):
             if not img or not os.path.isfile(img.get("path", "")) or sha256(img["path"]) != img.get("sha256"):
                 bad("image-hash", t, "image missing or sha256 mismatch")
             elif low in LOGICAL_A:
-                cur = (layout or {}).get("partitions", {}).get(low, {}).get("size")
+                cur = (extents if extents is not None else lp_sizes(layout)).get(low)
                 if cur is None or os.path.getsize(img["path"]) > cur:
                     bad("extent", t, f"image {os.path.getsize(img['path'])} B exceeds live extent {cur}; "
                                      "would need LP metadata change in shared super")

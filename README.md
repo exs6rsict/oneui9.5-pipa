@@ -19,11 +19,11 @@ Proyek audit dan port One UI 9.5 yang kompatibel dengan Xiaomi Pad 6 (codename `
 | D2 | XGSI One UI 9.5 `64_32` (`SM-S948B` / `S948BXXU6ZZKN`, Android 17 / SDK 37.2) | **Jalur utama** GSI 9.5 | **Dipilih & terverifikasi** (`inputs/donors/`) |
 | D3, D4 | XGSI One UI 9.0 | Referensi konfigurasi saja | Opsional |
 
-Detail dan sumber ada di [ROADMAP.md](ROADMAP.md). Ringkasan checkpoint & bukti teknis tersedia di:
+Detail dan sumber ada di [ROADMAP.md](ROADMAP.md). Ringkasan checkpoint & bukti teknis tersedia di (hanya `reports/CHECKPOINT.md` yang ada di Git; laporan `reports/port95/` hanya ada di workspace lokal):
 - [reports/CHECKPOINT.md](reports/CHECKPOINT.md) — checkpoint utama pengembangan & kontrak keselamatan dual-boot
-- [reports/port95/README.md](reports/port95/README.md) — audit integrasi B0 + D2
-- [reports/port95/bpf-backport/README.md](reports/port95/bpf-backport/README.md) — backport BPF `bpf_for_each_map_elem` + `vgate` + uji QEMU arm64
-- [reports/port95/dualboot/README.md](reports/port95/dualboot/README.md) — kontrak dual-boot, SELinux permissive, dan dump layout live `reports/port95/dualboot/live-backup/`
+- `reports/port95/README.md` *(lokal saja, tidak di Git: `/reports/*` di-gitignore)* — audit integrasi B0 + D2
+- `reports/port95/bpf-backport/README.md` *(lokal saja, tidak di Git: `/reports/*` di-gitignore)* — backport BPF `bpf_for_each_map_elem` + `vgate` + uji QEMU arm64
+- `reports/port95/dualboot/README.md` *(lokal saja, tidak di Git: `/reports/*` di-gitignore)* — kontrak dual-boot, SELinux permissive, dan dump layout live `reports/port95/dualboot/live-backup/`
 
 ## Isi repo
 

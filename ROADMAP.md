@@ -18,7 +18,7 @@ Membandingkan ROM One UI yang sudah diport ke pipa dengan kandidat donor One UI 
 - [x] Menyediakan paket donor D2 (`inputs/donors/XGSI_SM-S948B_S948BXXU6ZZKN_arm64.zip`).
 - [x] Memverifikasi metadata langsung dari image (`reports/port95/README.md`, `reports/CHECKPOINT.md`).
 - [x] Mengambil dump GPT & LP `super` live perangkat `pipa` (`reports/port95/dualboot/live-backup/`).
-- [ ] Menyelesaikan perakitan offline & manifest Gate 5 (`system_a.erofs.v1.8.9.img` sedang ditarik dari VPS).
+- [x] Menyelesaikan perakitan offline & manifest Gate 5 (`reports/port95/GATE5-REPORT.md`, lokal saja): offline verified, **NOT APPROVED FOR FLASH**.
 - [ ] Uji perangkat & bring-up nyata di `pipa` (Fase 6–7, menunggu Gate 5 + persetujuan eksplisit Gate 6).
 
 ## Kandidat awal
@@ -137,9 +137,9 @@ Target tetap One UI 9.5. Jika semua jalur terblokir, hasilnya dilaporkan sebagai
 - [x] Buat script patch/repack yang dapat diulang tanpa mengubah input asli (`scripts/port95_build.py`, `scripts/erofs95.py`, `scripts/erofs95_repro.py`).
 - [x] Terapkan perubahan kecil bertahap; catat sumber, alasan dan file yang disentuh (`reports/port95/README.md`, `reports/port95/bpf-backport/README.md`).
 - [x] Tangani permissions, ownership, symlink dan SELinux contexts saat repack (EROFS `v1.8.9` terverifikasi `metadata+content identical`, `fsck.erofs rc=0`, 689/689 domain permissive via `scripts/sepolicy_permissive.py`).
-- [x] Validasi filesystem/image, ukuran partisi terhadap layout live `pipa` (`7,004,303,360 B` ≤ `9,126,805,504 B` `super` dengan sisa ~1.98 GiB; `boot_a` `192 MiB`), konfigurasi mount dan VINTF/HAL yang dapat diperiksa offline.
-- [ ] Audit installer / rencana `lpmake` slot A agar hanya menyentuh partisi yang dituju dan sesuai layout pipa aktual (`scripts/flashplan.py`).
-- [ ] Hasilkan manifest artifact, checksum, daftar perubahan serta daftar keterbatasan final untuk Gate 5.
+- [ ] Validasi ukuran partisi terhadap layout live `pipa` **per partisi**, bukan total vs seluruh `super`. In-place (extent live, aturan `scripts/flashplan.py`) **tidak muat**: `product_a`, `vendor_a`, `odm_a` melebihi extent live (`GATE5-REPORT.md` §4). Total `7,004,303,360 B` vs `super` `9,126,805,504 B` hanya batas atas, bukan bukti muat. Physical `boot_a`/`vendor_boot_a`/`dtbo_a` sama persis dengan ukuran GPT. Filesystem, konfigurasi mount dan VINTF/HAL sudah diperiksa offline.
+- [ ] Rencana re-layout LP grup `_a` saja (bukan `lpmake` super utuh): validator wajib menjaga GPT, `sda34` userdata, `sda35` Linux, entri/grup slot B dan header metadata. Tanpa validator itu, `flashplan.py` menolak resize (`shared-super`).
+- [x] Hasilkan manifest artifact, checksum, daftar perubahan serta daftar keterbatasan final untuk Gate 5 (`reports/port95/gate5-slot-a-manifest.json`, lokal saja).
 
 **Gate 5:** Artifact lolos pemeriksaan offline dan memiliki prosedur pengujian serta rollback yang spesifik. Lolos gate ini belum membuktikan boot.
 
