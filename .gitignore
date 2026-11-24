@@ -3,6 +3,7 @@
 /work/
 /artifacts/
 /logs/
+/out/
 
 # Extracted OEM metadata, device layout and local worker evidence
 /inventory/
