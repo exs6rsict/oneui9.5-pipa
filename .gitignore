@@ -4,6 +4,11 @@
 /artifacts/
 /logs/
 
+# Extracted OEM metadata, device layout and local worker evidence
+/inventory/
+/reports/*
+!/reports/CHECKPOINT.md
+
 # Local credentials and Python caches
 .env
 .env.*
