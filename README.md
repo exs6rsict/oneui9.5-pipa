@@ -2,7 +2,7 @@
 
 Proyek audit dan port One UI 9.5 yang kompatibel dengan Xiaomi Pad 6 (codename `pipa`).
 
-> **Status: tahap audit offline.** Belum ada artifact, belum ada image yang diuji, dan belum ada klaim boot atau kompatibilitas. Jangan flash apa pun dari repo ini.
+> **Status: validasi offline & perakitan Gate 5 (eksperimental).** Image kandidat (`boot_a` SukiSU+BPF/vgate dan `system_a` EROFS v1.8.9) sudah dibangun dan diverifikasi secara offline, serta layout GPT/LP live perangkat `pipa` sudah didump. **Belum ada uji boot di perangkat `pipa` dan belum disetujui untuk flashing.** Jangan flash apa pun tanpa persetujuan eksplisit pada Gate 6.
 
 ## Target
 
@@ -12,14 +12,18 @@ Proyek audit dan port One UI 9.5 yang kompatibel dengan Xiaomi Pad 6 (codename `
 
 ## Kandidat donor
 
-| ID | Kandidat | Peran |
-| --- | --- | --- |
-| B0 | Port One UI yang sudah bekerja di pipa | Baseline (belum disediakan) |
-| D1 | Tab S9+ `SM-X810` firmware | Donor firmware tablet; versi One UI perlu diverifikasi |
-| D2 | XGSI One UI 9.5 `64_32` (`SM-S948B`) | Kandidat GSI 9.5 |
-| D3, D4 | XGSI One UI 9.0 | Referensi konfigurasi saja |
+| ID | Kandidat | Peran | Status |
+| --- | --- | --- | --- |
+| B0 | Port One UI 8.0 pipa (`oneui_8.0_gts9u_port_pipa_decrypted_20260816.zip`) | Baseline (vendor/odm/product/system_ext/boot/dtbo) | **Tersedia & terverifikasi** (`inputs/baseline-pipa/`) |
+| D1 | Tab S9+ `SM-X810` firmware | Donor firmware tablet | Tidak dipilih |
+| D2 | XGSI One UI 9.5 `64_32` (`SM-S948B` / `S948BXXU6ZZKN`, Android 17 / SDK 37.2) | **Jalur utama** GSI 9.5 | **Dipilih & terverifikasi** (`inputs/donors/`) |
+| D3, D4 | XGSI One UI 9.0 | Referensi konfigurasi saja | Opsional |
 
-Detail dan sumber ada di [ROADMAP.md](ROADMAP.md). Metadata itu berasal dari halaman distribusi dan belum diverifikasi dari binary.
+Detail dan sumber ada di [ROADMAP.md](ROADMAP.md). Ringkasan checkpoint & bukti teknis tersedia di:
+- [reports/CHECKPOINT.md](reports/CHECKPOINT.md) — checkpoint utama pengembangan & kontrak keselamatan dual-boot
+- [reports/port95/README.md](reports/port95/README.md) — audit integrasi B0 + D2
+- [reports/port95/bpf-backport/README.md](reports/port95/bpf-backport/README.md) — backport BPF `bpf_for_each_map_elem` + `vgate` + uji QEMU arm64
+- [reports/port95/dualboot/README.md](reports/port95/dualboot/README.md) — kontrak dual-boot, SELinux permissive, dan dump layout live `reports/port95/dualboot/live-backup/`
 
 ## Isi repo
 

@@ -10,15 +10,16 @@ Membandingkan ROM One UI yang sudah diport ke pipa dengan kandidat donor One UI 
 - Tahap awal hanya audit offline. Download, ekstraksi, modifikasi image, dan flashing adalah tahap terpisah.
 - Tidak ada jaminan boot atau kompatibilitas hanya berdasarkan label versi, chipset, atau laporan perangkat lain.
 
-## Status awal
+## Status terkini (2026-11-25)
 
 - [x] Menetapkan pipa sebagai target.
 - [x] Mengumpulkan tautan kandidat awal.
-- [ ] Menyediakan paket baseline port pipa.
-- [ ] Menyediakan paket donor yang akan dibandingkan.
-- [ ] Memverifikasi metadata langsung dari image.
-
-Metadata kandidat di bawah berasal dari halaman distribusi, belum diverifikasi dari binary. Tautan unduhan dan klaim versi bukan bukti keamanan atau kelayakan image.
+- [x] Menyediakan paket baseline port pipa (`inputs/baseline-pipa/`).
+- [x] Menyediakan paket donor D2 (`inputs/donors/XGSI_SM-S948B_S948BXXU6ZZKN_arm64.zip`).
+- [x] Memverifikasi metadata langsung dari image (`reports/port95/README.md`, `reports/CHECKPOINT.md`).
+- [x] Mengambil dump GPT & LP `super` live perangkat `pipa` (`reports/port95/dualboot/live-backup/`).
+- [ ] Menyelesaikan perakitan offline & manifest Gate 5 (`system_a.erofs.v1.8.9.img` sedang ditarik dari VPS).
+- [ ] Uji perangkat & bring-up nyata di `pipa` (Fase 6–7, menunggu Gate 5 + persetujuan eksplisit Gate 6).
 
 ## Kandidat awal
 
@@ -133,12 +134,12 @@ Target tetap One UI 9.5. Jika semua jalur terblokir, hasilnya dilaporkan sebagai
 
 ## Fase 5 — Implementasi dan validasi offline
 
-- [ ] Buat script patch/repack yang dapat diulang tanpa mengubah input asli.
-- [ ] Terapkan perubahan kecil bertahap; catat sumber, alasan dan file yang disentuh.
-- [ ] Tangani permissions, ownership, symlink dan SELinux contexts saat repack.
-- [ ] Validasi filesystem/image, ukuran partisi, konfigurasi mount, VINTF dan dependensi yang dapat diperiksa offline.
-- [ ] Audit installer agar hanya menyentuh partisi yang dituju dan sesuai layout pipa aktual.
-- [ ] Hasilkan manifest artifact, checksum, daftar perubahan serta daftar keterbatasan.
+- [x] Buat script patch/repack yang dapat diulang tanpa mengubah input asli (`scripts/port95_build.py`, `scripts/erofs95.py`, `scripts/erofs95_repro.py`).
+- [x] Terapkan perubahan kecil bertahap; catat sumber, alasan dan file yang disentuh (`reports/port95/README.md`, `reports/port95/bpf-backport/README.md`).
+- [x] Tangani permissions, ownership, symlink dan SELinux contexts saat repack (EROFS `v1.8.9` terverifikasi `metadata+content identical`, `fsck.erofs rc=0`, 689/689 domain permissive via `scripts/sepolicy_permissive.py`).
+- [x] Validasi filesystem/image, ukuran partisi terhadap layout live `pipa` (`7,004,303,360 B` ≤ `9,126,805,504 B` `super` dengan sisa ~1.98 GiB; `boot_a` `192 MiB`), konfigurasi mount dan VINTF/HAL yang dapat diperiksa offline.
+- [ ] Audit installer / rencana `lpmake` slot A agar hanya menyentuh partisi yang dituju dan sesuai layout pipa aktual (`scripts/flashplan.py`).
+- [ ] Hasilkan manifest artifact, checksum, daftar perubahan serta daftar keterbatasan final untuk Gate 5.
 
 **Gate 5:** Artifact lolos pemeriksaan offline dan memiliki prosedur pengujian serta rollback yang spesifik. Lolos gate ini belum membuktikan boot.
 
