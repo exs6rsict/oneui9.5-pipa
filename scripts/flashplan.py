@@ -15,8 +15,8 @@ PROTECTED_NAMES = re.compile(
     r"^(linux|userdata|metadata|persist|misc|frp|gpt|primarygpt|backupgpt|partition|"
     r"xbl|xbl_config|abl|tz|hyp|aop|keymaster|modem|devcfg|qupfw|uefisecapp|cmnlib|cmnlib64|"
     r"bluetooth|dsp|imagefv|featenabler|vbmeta|vbmeta_system)(_a)?$", re.I)
-PROTECTED_IDS = ("98b3ea14-c084-45ac-90a8-52c29d5229ee",   # linux / sda35, the running host
-                 "6f466478-a182-8910-0560-a2fdc92f1808")   # shared super / sda29
+# Reject all UUID-style device identifiers, without embedding a host's actual IDs.
+PROTECTED_ID = re.compile(r"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}", re.I)
 
 
 def sha256(path):
@@ -55,7 +55,7 @@ def validate(plan):
             bad("slot-b", t, "slot-B chain is protected")
         if low in ("super", "super_a", "super_b") or "super_empty" in low:
             bad("shared-super", t, "super is shared with slot B; whole/metadata writes forbidden")
-        if t.startswith("/") or "partuuid" in low or any(i in low for i in PROTECTED_IDS) or PROTECTED_NAMES.match(t):
+        if t.startswith("/") or "partuuid" in low or PROTECTED_ID.search(low) or PROTECTED_NAMES.match(t):
             bad("protected", t, "device paths, Linux host, GPT, data, metadata and firmware are protected")
         img = w.get("image")
         if w.get("op") == "write":

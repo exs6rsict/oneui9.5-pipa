@@ -45,7 +45,7 @@ class PlanTest(unittest.TestCase):
 
     def test_rejects_linux_host_gpt_userdata_metadata_by_name_or_device(self):
         for t in ("linux", "userdata", "metadata", "gpt", "PrimaryGPT", "/dev/sda35", "/dev/sda29",
-                  "PARTUUID=98b3ea14-c084-45ac-90a8-52c29d5229ee", "/dev/block/by-name/boot_a"):
+                  "PARTUUID=00000000-0000-4000-8000-000000000001", "00000000-0000-4000-8000-000000000002", "/dev/block/by-name/boot_a"):
             with self.subTest(t):
                 self.assertIn("protected", self.kinds(self.plan({"op": "write", "target": t, "image": self.img})))
 
