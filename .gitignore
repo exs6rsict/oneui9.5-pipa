@@ -1,0 +1,11 @@
+# ROM inputs and generated binary workspaces
+/inputs/
+/work/
+/artifacts/
+/logs/
+
+# Local credentials and Python caches
+.env
+.env.*
+__pycache__/
+*.pyc

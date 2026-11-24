@@ -1,11 +1,11 @@
-# Roadmap audit dan port One UI 9 / 9.5 ke Xiaomi Pad 6 (pipa)
+# Roadmap audit dan port One UI 9.5 ke Xiaomi Pad 6 (pipa)
 
 ## Tujuan dan batasan
 
-Membandingkan ROM One UI yang sudah diport ke pipa dengan kandidat donor One UI 9/9.5, lalu memilih jalur implementasi berdasarkan bukti kompatibilitas.
+Membandingkan ROM One UI yang sudah diport ke pipa dengan kandidat donor One UI 9.5, lalu memilih jalur implementasi berdasarkan bukti kompatibilitas.
 
 - Target utama: Xiaomi Pad 6, codename `pipa`.
-- Kandidat target: One UI 9.5; fallback: One UI 9 jika hambatan 9.5 belum terselesaikan.
+- Target: One UI 9.5 yang kompatibel dengan pipa. One UI 9 bukan target dan bukan fallback; donor 9.0 hanya boleh dipakai sebagai referensi konfigurasi.
 - Baseline: ROM One UI pipa yang sudah bekerja, beserta versi vendor/kernel dan catatan bug-nya. Versi dan sumber harus dikonfirmasi dari paket, bukan diasumsikan.
 - Tahap awal hanya audit offline. Download, ekstraksi, modifikasi image, dan flashing adalah tahap terpisah.
 - Tidak ada jaminan boot atau kompatibilitas hanya berdasarkan label versi, chipset, atau laporan perangkat lain.
@@ -27,8 +27,8 @@ Metadata kandidat di bawah berasal dari halaman distribusi, belum diverifikasi d
 | B0 | Port One UI yang sudah bekerja di pipa | Menunggu paket/sumber dari pengguna | Acuan integrasi hardware, boot, dan patch |
 | D1 | Tab S9+ `SM-X810`, KOO, `X810XXU6FZK2`; listing menyebut One UI 9 / Android 17 | https://samfw.com/firmware/SM-X810/KOO/X810XXU6FZK2 | Donor firmware tablet mentah |
 | D2 | XGSI One UI 9.5 `64_32`, donor `SM-S948B` / `m3q`, build `S948BXXU6ZZKN` | https://t.me/xgsiupdates/233 | Kandidat GSI 9.5 dan referensi patch kompatibilitas |
-| D3 | XGSI One UI 9.0 `64_32`, donor Tab S12 Ultra `SM-X946N`, board tercantum `mt6993` | https://t.me/xgsiupdates/209 | Pembanding konfigurasi tablet; platform berbeda |
-| D4 | XGSI One UI 9.0 `64_32`, donor `SM-F971B` / `h8q` | https://t.me/xgsiupdates/201 | Pembanding konfigurasi layar besar/foldable |
+| D3 | XGSI One UI 9.0 `64_32`, donor Tab S12 Ultra `SM-X946N`, board tercantum `mt6993` | https://t.me/xgsiupdates/209 | Referensi konfigurasi tablet saja (bukan target); platform berbeda |
+| D4 | XGSI One UI 9.0 `64_32`, donor `SM-F971B` / `h8q` | https://t.me/xgsiupdates/201 | Referensi konfigurasi layar besar/foldable saja (bukan target) |
 
 D3 dan D4 opsional; tidak perlu mengunduh semuanya sebelum memulai audit. Prioritas awal: **B0 + D1 + D2**.
 
@@ -115,11 +115,12 @@ Audit setiap donor terhadap B0, bukan sekadar donor terhadap donor.
 
 ## Fase 4 — Keputusan jalur port
 
-Bandingkan tiga opsi berdasarkan hasil audit:
+Bandingkan dua opsi berdasarkan hasil audit:
 
 1. **Firmware tablet D1 → pipa:** mempertahankan basis UI tablet dan membawa ulang patch pipa yang relevan.
 2. **GSI D2 → pipa:** memanfaatkan adaptasi GSI untuk eksperimen 9.5; tetap mengaudit integrasi hardware dan UX tablet.
-3. **Fallback One UI 9:** jika 9.5 memiliki blocker yang belum dapat diatasi.
+
+Target tetap One UI 9.5. Jika semua jalur terblokir, hasilnya dilaporkan sebagai blocker, bukan turun ke One UI 9.
 
 - [ ] Nilai peluang boot berdasarkan bukti, kelengkapan tablet UX, kompatibilitas kernel/vendor, kemudahan debug dan asal patch.
 - [ ] Pilih satu target awal; hindari mengerjakan banyak donor sekaligus sebelum memperoleh log boot pertama.
