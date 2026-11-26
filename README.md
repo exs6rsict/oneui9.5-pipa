@@ -2,7 +2,7 @@
 
 Proyek audit dan port One UI 9.5 yang kompatibel dengan Xiaomi Pad 6 (codename `pipa`).
 
-> **Status: validasi offline & perakitan Gate 5 (eksperimental).** Image kandidat (`boot_a` SukiSU+BPF/vgate dan `system_a` EROFS v1.8.9) sudah dibangun dan diverifikasi secara offline, serta layout GPT/LP live perangkat `pipa` sudah didump. **Belum ada uji boot di perangkat `pipa` dan belum disetujui untuk flashing.** Jangan flash apa pun tanpa persetujuan eksplisit pada Gate 6.
+> **Status (2026-11-26): Gate 6 Boot Attempt 1 dianalisis; kandidat `boot_a` perbaikan siap uji Attempt 2.** Image Gate 6 (`system_a` EROFS v1.8.9, `system_ext_a`, `product_a`, `vendor_a`, `odm_a`, `dtbo_a`, `vendor_boot_a`, `boot_a` SukiSU+BPF/vgate) sudah di-flash ke Slot A dengan persetujuan eksplisit. Boot Attempt 1 mengeksekusi kernel & `init`, lalu berhenti di logo MIUI karena bug `erofs_fill_symlink` (`inline data cross block boundary @ nid 767`, `/system_ext`). Fix EROFS symlink ([patches/0001-port95-erofs-fill_symlink-read-inline-data-from-next-block.patch](patches/0001-port95-erofs-fill_symlink-read-inline-data-from-next-block.patch)) sudah dikompilasi di VPS dan dikemas ke `boot_a.img` baru (`7a179ab1...`), siap untuk uji `boot_a`-only Attempt 2 (perangkat saat ini di fallback Linux Slot B; Attempt 2 **belum diuji**). Jangan menyentuh Slot B (`*_b`), `sda35`, GPT, atau firmware bootloader.
 
 ## Target
 

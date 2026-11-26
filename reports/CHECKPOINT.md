@@ -1,8 +1,8 @@
 # One UI 9.5 pipa — checkpoint pengembangan
 
-## Status
+## Status (2026-11-26)
 
-Tooling audit dan build offline tersedia. Build image eksperimental pernah dihasilkan dan diverifikasi offline; **belum diuji boot di pipa dan tidak disetujui untuk flashing**. Artifact binary dan hasil ekstraksi tidak disimpan dalam Git.
+Tooling audit, build offline, backport BPF + `vgate` (`5.15.136`), repack EROFS `v1.8.9`, dan persiapan Gate 6 (`scripts/lprelayout.py`, `scripts/backup_slot_a_boot.sh`) sudah selesai. Gate 6 Boot Attempt 1 telah dieksekusi di Slot A atas persetujuan pengguna, gagal di `erofs_fill_symlink` (3 symlink di `system_a.img`, termasuk `/system_ext`), dan perangkat dikembalikan ke fallback Linux Slot B tanpa menyentuh `boot_b`/`sda35`. Patch kernel fix ([patches/0001-port95-erofs-fill_symlink-read-inline-data-from-next-block.patch](patches/0001-port95-erofs-fill_symlink-read-inline-data-from-next-block.patch)) sudah dikompilasi di VPS dan dikemas ke `boot_a.img` baru (`7a179ab1...`); **Boot Attempt 2 belum diuji di perangkat**. Artifact binary dan hasil ekstraksi tetap tidak disimpan dalam Git.
 
 ## Input
 

@@ -1,0 +1,61 @@
+port95: erofs: fill_symlink: read inline data from the block it is really in
+
+A compact inode at block offset 4064 (+52B xattrs) makes erofs_read_inode return
+ofs == PAGE_SIZE with the inode's own page; fill_symlink then rejected 3 valid
+symlinks of system_a (/system_ext nid 767, ...) with 'inline data cross block
+boundary'. Compute the real position like erofs_map_blocks_flatmode does, keep
+the genuine cross-block check, and read the later meta block when needed.
+Apply on N0 lineage-24.0-bpf 8c32fb4293d5 (git apply).
+---
+diff --git a/fs/erofs/inode.c b/fs/erofs/inode.c
+index 5f9c6fb79ac0..4c4fd53ec3de 100644
+--- a/fs/erofs/inode.c
++++ b/fs/erofs/inode.c
+@@ -197,6 +197,10 @@ static int erofs_fill_symlink(struct inode *inode, void *data,
+ 			      unsigned int m_pofs)
+ {
+ 	struct erofs_inode *vi = EROFS_I(inode);
++	/* true on-disk position of the inline data, as erofs_map_blocks_flatmode computes it */
++	const erofs_off_t pos = iloc(EROFS_SB(inode->i_sb), vi->nid) +
++		vi->inode_isize + vi->xattr_isize;
++	struct page *mpage = NULL;
+ 	char *lnk;
+ 
+ 	/* if it cannot be handled with fast symlink scheme */
+@@ -212,7 +216,7 @@ static int erofs_fill_symlink(struct inode *inode, void *data,
+ 
+ 	m_pofs += vi->xattr_isize;
+ 	/* inline symlink data shouldn't cross page boundary as well */
+-	if (m_pofs + inode->i_size > PAGE_SIZE) {
++	if (erofs_blkoff(pos) + inode->i_size > PAGE_SIZE) {
+ 		kfree(lnk);
+ 		erofs_err(inode->i_sb,
+ 			  "inline data cross block boundary @ nid %llu",
+@@ -221,8 +225,27 @@ static int erofs_fill_symlink(struct inode *inode, void *data,
+ 		return -EFSCORRUPTED;
+ 	}
+ 
++	/*
++	 * inode (+ xattrs) may end at or past the end of @data's block (e.g. a
++	 * compact inode at offset 4064): the inline data then starts in a later
++	 * meta block, which erofs_read_inode does not hand us.
++	 */
++	if (m_pofs >= PAGE_SIZE) {
++		mpage = erofs_get_meta_page(inode->i_sb, erofs_blknr(pos));
++		if (IS_ERR(mpage)) {
++			kfree(lnk);
++			return PTR_ERR(mpage);
++		}
++		data = page_address(mpage);
++		m_pofs = erofs_blkoff(pos);
++	}
++
+ 	memcpy(lnk, data + m_pofs, inode->i_size);
+ 	lnk[inode->i_size] = '\0';
++	if (mpage) {
++		unlock_page(mpage);
++		put_page(mpage);
++	}
+ 
+ 	inode->i_link = lnk;
+ 	inode->i_op = &erofs_fast_symlink_iops;

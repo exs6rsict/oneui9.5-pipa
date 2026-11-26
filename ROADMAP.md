@@ -10,7 +10,7 @@ Membandingkan ROM One UI yang sudah diport ke pipa dengan kandidat donor One UI 
 - Tahap awal hanya audit offline. Download, ekstraksi, modifikasi image, dan flashing adalah tahap terpisah.
 - Tidak ada jaminan boot atau kompatibilitas hanya berdasarkan label versi, chipset, atau laporan perangkat lain.
 
-## Status terkini (2026-11-25)
+## Status terkini (2026-11-26)
 
 - [x] Menetapkan pipa sebagai target.
 - [x] Mengumpulkan tautan kandidat awal.
@@ -18,8 +18,11 @@ Membandingkan ROM One UI yang sudah diport ke pipa dengan kandidat donor One UI 
 - [x] Menyediakan paket donor D2 (`inputs/donors/XGSI_SM-S948B_S948BXXU6ZZKN_arm64.zip`).
 - [x] Memverifikasi metadata langsung dari image (`reports/port95/README.md`, `reports/CHECKPOINT.md`).
 - [x] Mengambil dump GPT & LP `super` live perangkat `pipa` (`reports/port95/dualboot/live-backup/`).
-- [x] Menyelesaikan perakitan offline & manifest Gate 5 (`reports/port95/GATE5-REPORT.md`, lokal saja): offline verified, **NOT APPROVED FOR FLASH**.
-- [ ] Uji perangkat & bring-up nyata di `pipa` (Fase 6–7, menunggu Gate 5 + persetujuan eksplisit Gate 6).
+- [x] Menyelesaikan perakitan offline & manifest Gate 5 (`reports/port95/GATE5-REPORT.md`, lokal saja).
+- [x] Mempersiapkan Gate 6: backup `boot_a`/`vendor_boot_a`/`dtbo_a`, validator LP re-layout `scripts/lprelayout.py`, dan flash bundle Slot A.
+- [x] Menjalankan Gate 6 Boot Attempt 1 & mendiagnosis `pstore`: kernel + `init` berjalan, berhenti karena bug `erofs_fill_symlink` pada 3 symlink `system_a.img` (`/system_ext` nid 767).
+- [x] Memperbaiki `erofs_fill_symlink` ([patches/0001-port95-erofs-fill_symlink-read-inline-data-from-next-block.patch](patches/0001-port95-erofs-fill_symlink-read-inline-data-from-next-block.patch)) dan membangun ulang kernel + `boot_a.img` (`7a179ab1...`) di VPS.
+- [ ] Uji perangkat Boot Attempt 2 (`boot_a` baru) & bring-up nyata di `pipa` (Fase 7: M1–M6).
 
 ## Kandidat awal
 
