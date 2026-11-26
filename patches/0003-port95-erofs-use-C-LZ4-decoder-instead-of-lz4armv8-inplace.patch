@@ -1,0 +1,47 @@
+From: port95 backport <port95@localhost>
+Subject: [PATCH] port95: erofs: use the C LZ4 decoder instead of lz4armv8 (in-place)
+
+Reverts the EROFS side of 15f150fba66d / 97ea670c1f09 only: z_erofs_lz4_decompress
+calls LZ4_decompress_safe{,_partial} again (upstream behaviour). Other users of
+LZ4_arm64_decompress_safe (zram/crypto lz4, f2fs, incfs, unlz4) pass dip=false and
+are untouched.
+
+Evidence: boot attempt 2 dm-0 "z_erofs_lz4_decompress: failed to decompress -3901
+in[4096, 0] out[4492]". -3901 is the C tail's error at input offset 3900 after the
+asm hand-over; all 55 system_a.img files that contain a 4096->4492 pcluster pass
+fsck.erofs (liblz4), so the on-disk data is valid. EROFS is the only caller passing
+dip=true, where lz4armv8 Done1 rewrites the source token in place.
+
+NOT BUILT, NOT RUNTIME-TESTED (VPS unreachable, local compile disallowed).
+---
+--- a/fs/erofs/decompressor.c
++++ b/fs/erofs/decompressor.c
+@@ -222,22 +222,18 @@
+ 		return PTR_ERR(src);
+ 
+ 	/* legacy format could compress extra data in a pcluster. */
++	/*
++	 * port95: use the reference C decoder. The lz4armv8 fast path with dip=inplace_io
++	 * rewrites the source and over-copies past the 48-byte in-place margin
++	 * (boot attempt 2: "failed to decompress -3901 in[4096, 0] out[4492]" on data
++	 * that fsck.erofs/liblz4 decodes cleanly).
++	 */
+ 	if (rq->partial_decoding || !support_0padding)
+-#if defined(CONFIG_ARM64) && defined(CONFIG_KERNEL_MODE_NEON)
+-		ret = LZ4_arm64_decompress_safe_partial(src + inputmargin, out,
+-				rq->inputsize, rq->outputsize, rq->inplace_io);
+-#else
+ 		ret = LZ4_decompress_safe_partial(src + inputmargin, out,
+ 				rq->inputsize, rq->outputsize, rq->outputsize);
+-#endif
+ 	else
+-#if defined(CONFIG_ARM64) && defined(CONFIG_KERNEL_MODE_NEON)
+-		ret = LZ4_arm64_decompress_safe(src + inputmargin, out,
+-					  rq->inputsize, rq->outputsize, rq->inplace_io);
+-#else
+ 		ret = LZ4_decompress_safe(src + inputmargin, out,
+ 					  rq->inputsize, rq->outputsize);
+-#endif
+ 
+ 	if (ret != rq->outputsize) {
+ 		erofs_err(rq->sb, "failed to decompress %d in[%u, %u] out[%u]",

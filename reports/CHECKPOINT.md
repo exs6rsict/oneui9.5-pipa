@@ -1,8 +1,8 @@
 # One UI 9.5 pipa — checkpoint pengembangan
 
-## Status (2026-11-26)
+## Status (2026-11-27)
 
-Tooling audit, build offline, backport BPF + `vgate` (`5.15.136`), repack EROFS `v1.8.9`, dan persiapan Gate 6 (`scripts/lprelayout.py`, `scripts/backup_slot_a_boot.sh`) sudah selesai. Gate 6 Boot Attempt 1 telah dieksekusi di Slot A atas persetujuan pengguna, gagal di `erofs_fill_symlink` (3 symlink di `system_a.img`, termasuk `/system_ext`), dan perangkat dikembalikan ke fallback Linux Slot B tanpa menyentuh `boot_b`/`sda35`. Patch kernel fix ([patches/0001-port95-erofs-fill_symlink-read-inline-data-from-next-block.patch](patches/0001-port95-erofs-fill_symlink-read-inline-data-from-next-block.patch)) sudah dikompilasi di VPS dan dikemas ke `boot_a.img` baru (`7a179ab1...`); **Boot Attempt 2 belum diuji di perangkat**. Artifact binary dan hasil ekstraksi tetap tidak disimpan dalam Git.
+Tooling audit, build offline, backport BPF + `vgate` (`5.15.136`), repack EROFS `v1.8.9`, dan persiapan Gate 6 (`scripts/lprelayout.py`, `scripts/backup_slot_a_boot.sh`) sudah selesai. Gate 6 Boot Attempt 1 berhenti di `erofs_fill_symlink` (diperbaiki di [0001](patches/0001-port95-erofs-fill_symlink-read-inline-data-from-next-block.patch)). Boot Attempt 2 (`7a179ab1...`) melewati `erofs_fill_symlink`, lalu berhenti pada `netbpfload` (`netd.o` butuh helper `#122` `bpf_get_netns_cookie`) dan EROFS `lz4armv8` `-3901 in[4096, 0] out[4492]`. Perbaikan [0002](patches/0002-port95-bpf-allow-bpf_get_netns_cookie-in-sock_ops-and-cgroup_sockopt.patch) + [0003](patches/0003-port95-erofs-use-C-LZ4-decoder-instead-of-lz4armv8-inplace.patch) sudah dibangun di VPS (`gate6fix`), lolos uji QEMU arm64 untuk rantai asli `netbpfload` → `uprobestatsbpfload` → `/system/bin/bpfloader` (`rc=0`, `bpf.progs_loaded=1`, `181` entri bpffs) dan slice EROFS `system_a` (`4096→4492` + `/system_ext`), serta dikemas ke `boot_a.img` baru (`6fb3aba4...`). **Boot Attempt 3 belum diuji di perangkat.** Artifact binary dan hasil ekstraksi tetap tidak disimpan dalam Git.
 
 ## Input
 
