@@ -1,214 +1,169 @@
-# Roadmap audit dan port One UI 9.5 ke Xiaomi Pad 6 (pipa)
+# Roadmap: Audit and Port One UI 9.5 to Xiaomi Pad 6 (`pipa`)
 
-## Tujuan dan batasan
+## Goal and Constraints
 
-Membandingkan ROM One UI yang sudah diport ke pipa dengan kandidat donor One UI 9.5, lalu memilih jalur implementasi berdasarkan bukti kompatibilitas.
+Compare an existing working One UI port on `pipa` (`B0`) against One UI 9.5 donor candidates, then execute a clean, verifiable port preserving dual-boot Linux.
 
-- Target utama: Xiaomi Pad 6, codename `pipa`.
-- Target: One UI 9.5 yang kompatibel dengan pipa. One UI 9 bukan target dan bukan fallback; donor 9.0 hanya boleh dipakai sebagai referensi konfigurasi.
-- Baseline: ROM One UI pipa yang sudah bekerja, beserta versi vendor/kernel dan catatan bug-nya. Versi dan sumber harus dikonfirmasi dari paket, bukan diasumsikan.
-- Tahap awal hanya audit offline. Download, ekstraksi, modifikasi image, dan flashing adalah tahap terpisah.
-- Tidak ada jaminan boot atau kompatibilitas hanya berdasarkan label versi, chipset, atau laporan perangkat lain.
+- **Target device:** Xiaomi Pad 6, codename `pipa` (Slot A only; preserve `/dev/sda35` Linux and Slot B untouched).
+- **Target version:** One UI 9.5 (Android 17 / SDK 37.2). One UI 9.0 is neither the target nor a fallback; `9.0` donors are configuration references only.
+- **Baseline:** A verified working One UI `pipa` port (`B0`), cross-checked directly from binary images rather than distributor claims alone.
+- **Separation of concerns:** Offline audit, extraction, image modification, and device flashing are strictly separate stages.
+- **Evidence over assumptions:** Version labels, chipsets, or cross-device reports do not count as boot proof.
 
-## Status terkini (2026-11-27)
+## Current Status (2026-11-28)
 
-- [x] Menetapkan pipa sebagai target.
-- [x] Mengumpulkan tautan kandidat awal.
-- [x] Menyediakan paket baseline port pipa (`inputs/baseline-pipa/`).
-- [x] Menyediakan paket donor D2 (`inputs/donors/XGSI_SM-S948B_S948BXXU6ZZKN_arm64.zip`).
-- [x] Memverifikasi metadata langsung dari image (`reports/port95/README.md`, `reports/CHECKPOINT.md`).
-- [x] Mengambil dump GPT & LP `super` live perangkat `pipa` (`reports/port95/dualboot/live-backup/`).
-- [x] Menyelesaikan perakitan offline & manifest Gate 5 (`reports/port95/GATE5-REPORT.md`, lokal saja).
-- [x] Mempersiapkan Gate 6: backup `boot_a`/`vendor_boot_a`/`dtbo_a`, validator LP re-layout `scripts/lprelayout.py`, dan flash bundle Slot A.
-- [x] Menjalankan Gate 6 Boot Attempt 1 & mendiagnosis `pstore`: kernel + `init` berjalan, berhenti karena bug `erofs_fill_symlink` pada 3 symlink `system_a.img` (`/system_ext` nid 767).
-- [x] Memperbaiki `erofs_fill_symlink` ([0001](patches/0001-port95-erofs-fill_symlink-read-inline-data-from-next-block.patch)) dan membangun ulang `boot_a.img` (`7a179ab1...`) di VPS.
-- [x] Menjalankan Gate 6 Boot Attempt 2 & mendiagnosis `console-ramoops-0`: fix `erofs_fill_symlink` berhasil; ditemukan kegagalan `netbpfload` pada `netd.o` (helper `#122` `bpf_get_netns_cookie`) dan EROFS `lz4armv8` `-3901` (`4096→4492`).
-- [x] Menerapkan patch [0002](patches/0002-port95-bpf-allow-bpf_get_netns_cookie-in-sock_ops-and-cgroup_sockopt.patch) & [0003](patches/0003-port95-erofs-use-C-LZ4-decoder-instead-of-lz4armv8-inplace.patch), membangun kernel `gate6fix` di VPS, memverifikasi rantai `bpfloader` Stage 1–3 (`rc=0`, `bpf.progs_loaded=1`) + EROFS `system_a` di QEMU arm64, dan mengemas `boot_a.img` baru (`6fb3aba4...`).
-- [ ] Uji perangkat Boot Attempt 3 (`boot_a` baru) & bring-up nyata di `pipa` (Fase 7: M1–M6).
+- [x] Set `pipa` (Slot A dual-boot safe) as target.
+- [x] Gathered initial baseline & donor candidates.
+- [x] Verified `B0` baseline package (`inputs/baseline-pipa/`).
+- [x] Verified `D2` donor package (`inputs/donors/XGSI_SM-S948B_S948BXXU6ZZKN_arm64.zip`).
+- [x] Audited binary metadata from `B0` and `D2` (`reports/port95/README.md`, [reports/CHECKPOINT.md](reports/CHECKPOINT.md)).
+- [x] Captured live `pipa` GPT & LP `super` layout backups (`reports/port95/dualboot/live-backup/`).
+- [x] Completed Gate 5 offline image assembly & manifest (`reports/port95/GATE5-REPORT.md`, local only).
+- [x] Prepared Gate 6 Slot A bundle: `boot_a`/`vendor_boot_a`/`dtbo_a` backups, LP re-layout validator `scripts/lprelayout.py`.
+- [x] Executed Gate 6 Boot Attempt 1 & diagnosed `pstore`: kernel + `init` booted, halted on `erofs_fill_symlink` bug (`nid 767` `/system_ext`).
+- [x] Fixed `erofs_fill_symlink` ([0001](patches/0001-port95-erofs-fill_symlink-read-inline-data-from-next-block.patch)) and rebuilt `boot_a.img` (`7a179ab1...`) on VPS.
+- [x] Executed Gate 6 Boot Attempt 2 & diagnosed `console-ramoops-0`: `erofs_fill_symlink` fixed; halted on `netbpfload` (`netd.o` helper `#122` `bpf_get_netns_cookie`) and EROFS `lz4armv8` `-3901` (`4096→4492`).
+- [x] Applied patches [0002](patches/0002-port95-bpf-allow-bpf_get_netns_cookie-in-sock_ops-and-cgroup_sockopt.patch) & [0003](patches/0003-port95-erofs-use-C-LZ4-decoder-instead-of-lz4armv8-inplace.patch), built `gate6fix` kernel on VPS, passed arm64 QEMU (`bpfloader` Stage 1–3 `rc=0` / `bpf.progs_loaded=1` + EROFS `system_a` verification), packaged `boot_a.img` (`6fb3aba4...`).
+- [x] **Gate 6 Boot Attempt 3 PASSED to One UI 9.5 UI (`M1–M3` verified on hardware)**: `sys.boot_completed=1`, `bpf.progs_loaded=1`, `0` EROFS errors in `dmesg-boot3.txt`, `Permissive`, `/data` f2fs mounted `rw`, Wireless ADB (`uid=0`), Wi-Fi `wlan0`, quad Awinic audio, touch/pen switch, and `sensors@1.0-service` active.
+- [ ] **Phase 7 (`M4–M6`) hardware & tablet UX bugfixing**: fix phone→tablet UX (`ro.build.characteristics=tablet`, `lcd_density=280`, lockscreen rotation, Quick Settings/Notification width, `floating_feature`), restore stripped Samsung components (`com.samsung.android.lool` Device Care for `Device care`/`Battery`/`Storage`), stop `traced` 5s crash-loop, clean `vold`/RIL/lazy-AIDL noise, and fix USB ADB (`host_connected=false`).
 
-## Kandidat awal
+## Initial Candidates
 
-| ID | Kandidat | Sumber | Peran audit |
+| ID | Candidate | Source | Role |
 | --- | --- | --- | --- |
-| B0 | Port One UI yang sudah bekerja di pipa | Menunggu paket/sumber dari pengguna | Acuan integrasi hardware, boot, dan patch |
-| D1 | Tab S9+ `SM-X810`, KOO, `X810XXU6FZK2`; listing menyebut One UI 9 / Android 17 | https://samfw.com/firmware/SM-X810/KOO/X810XXU6FZK2 | Donor firmware tablet mentah |
-| D2 | XGSI One UI 9.5 `64_32`, donor `SM-S948B` / `m3q`, build `S948BXXU6ZZKN` | https://t.me/xgsiupdates/233 | Kandidat GSI 9.5 dan referensi patch kompatibilitas |
-| D3 | XGSI One UI 9.0 `64_32`, donor Tab S12 Ultra `SM-X946N`, board tercantum `mt6993` | https://t.me/xgsiupdates/209 | Referensi konfigurasi tablet saja (bukan target); platform berbeda |
-| D4 | XGSI One UI 9.0 `64_32`, donor `SM-F971B` / `h8q` | https://t.me/xgsiupdates/201 | Referensi konfigurasi layar besar/foldable saja (bukan target) |
+| B0 | Working One UI 8.0 port for `pipa` | https://t.me/XiaomiPad6Global/394100 | Reference for hardware integration, boot chain, and `pipa` patches |
+| D1 | Tab S9+ `SM-X810`, KOO, `X810XXU6FZK2` | https://samfw.com/firmware/SM-X810/KOO/X810XXU6FZK2 | Raw tablet firmware reference (One UI 9.0, not 9.5) |
+| D2 | XGSI One UI 9.5 `64_32`, `SM-S948B` / `m3q`, `S948BXXU6ZZKN` | https://t.me/xgsiupdates/233 | **Selected GSI 9.5 system base** (Android 17 / SDK 37.2) |
+| D3 | XGSI One UI 9.0 `64_32`, Tab S12 Ultra `SM-X946N`, board `mt6993` | https://t.me/xgsiupdates/209 | Tablet configuration reference only (not 9.5; different platform) |
+| D4 | XGSI One UI 9.0 `64_32`, `SM-F971B` / `h8q` | https://t.me/xgsiupdates/201 | Large-screen/foldable configuration reference only |
 
-D3 dan D4 opsional; tidak perlu mengunduh semuanya sebelum memulai audit. Prioritas awal: **B0 + D1 + D2**.
+Download references for D2: https://pixeldrain.com/u/TsrGCVBL and https://t.me/xgsimirror/15.
 
-Referensi download D2: https://pixeldrain.com/u/TsrGCVBL atau https://t.me/xgsimirror/15. Posting https://t.me/xgsiupdates/234 adalah varian bercandaan berlabel Boykisser UI, bukan kandidat utama.
-
-## Struktur workspace yang direncanakan
+## Planned Workspace Structure
 
 ```text
-inputs/                 Paket asli, read-only secara prosedural; jangan commit binary
+inputs/                 Original packages, read-only; never commit binaries
   baseline-pipa/
   donors/
-work/                   Hasil ekstraksi dan eksperimen per kandidat
-inventory/              Hash, metadata image, manifest partisi dan filesystem
-reports/                Audit, diff terarah, keputusan donor dan hasil uji
-patches/                Patch yang terlacak asal-usul serta alasannya
-scripts/                Tool inventory, diff, repack dan validasi
-artifacts/              Image/installer keluaran beserta checksum
-logs/                   Log boot dan uji hardware; sanitasi sebelum dibagikan
+work/                   Extraction and per-candidate experiments (gitignored)
+inventory/              Checksums, image metadata, partition & filesystem manifests (gitignored)
+reports/                Audits and local logs (only reports/CHECKPOINT.md is tracked)
+patches/                Tracked kernel/system patches with provenance
+scripts/                Inventory, diff, repack, relayout, and validation tooling
+artifacts/              Output images and checksums (gitignored)
+logs/                   Boot logs and hardware tests, sanitized (gitignored)
 ```
 
-Direktori dibuat saat diperlukan. Sebelum menaruh binary, siapkan `.gitignore` untuk input, hasil ekstraksi, artifact, dan log sensitif. Jangan commit paket ROM atau data pribadi.
+## Phase 0 — Package Intake and Readiness
 
-## Fase 0 — Penerimaan bahan dan kesiapan
+- [x] Record original filenames, sources, byte sizes, and SHA-256 checksums.
+- [x] Keep original archives unmodified; extract only into isolated candidate workspaces.
+- [x] Record baseline notes (One UI/Android version, vendor/firmware base, kernel, known bugs, SELinux state).
+- [x] Verify host disk space, filesystems, and required host tools from actual archive formats.
+- [x] Audit archives pre-extraction (reject path traversal / dangerous symlinks; never execute package installers).
 
-- [ ] Catat nama asli, sumber, ukuran byte dan SHA-256 setiap paket.
-- [ ] Simpan paket asli tanpa dimodifikasi; ekstraksi ke direktori kandidat masing-masing.
-- [ ] Minta catatan baseline: versi One UI/Android, vendor/firmware prasyarat, kernel, cara instalasi, known bugs, dan status SELinux.
-- [ ] Kumpulkan script/repo/changelog port baseline jika tersedia; tanpa source, tandai asal patch yang belum diketahui.
-- [ ] Periksa ruang disk, filesystem host, serta kebutuhan tool berdasarkan format paket yang benar-benar ditemukan.
-- [ ] Inventarisasi archive sebelum ekstraksi; tolak path traversal/symlink berbahaya, jangan menjalankan script installer dari paket selama audit.
+**Gate 0:** `B0` and at least one donor present, checksums logged, extraction capacity verified.
 
-**Gate 0:** B0 dan minimal satu donor tersedia, checksum tercatat, kapasitas ekstraksi cukup. Bahan yang hilang disebut eksplisit, bukan ditebak.
+## Phase 1 — Reproducible Extraction and Inventory
 
-## Fase 1 — Ekstraksi dan inventory reproducible
+- [x] Identify container/filesystem formats (sparse/raw ext4, EROFS, LP dynamic partitions, boot v3/v4).
+- [x] Record extractor versions and reproducible CLI commands.
+- [x] Inventory partitions present vs absent across packages.
+- [x] Record exact image sizes, LP groups, and capacity limits.
+- [x] Extract build properties from `system`, `system_ext`, `product`, `vendor`, and `odm`.
+- [x] Cross-check Android version, SDK, fingerprint, SPL, and One UI properties against distributor claims.
+- [x] Inventory APKs/APEXes/JARs, native libraries, ABIs, symlinks, permissions, SELinux contexts, init, and fstab.
 
-- [ ] Identifikasi format: ZIP/TAR/Odin AP, LZ4, sparse/raw image, dynamic partitions/super, payload OTA, EROFS/ext4 sesuai temuan.
-- [ ] Rekam tool, versi dan command ekstraksi agar bisa diulang.
-- [ ] Inventarisasi partisi yang tersedia dan partisi yang tidak disertakan dalam paket.
-- [ ] Rekam filesystem, ukuran image, logical partition/group dan batas kapasitas yang relevan.
-- [ ] Ekstrak properti build di `system`, `system_ext`, `product`, `vendor`, dan `odm` jika ada.
-- [ ] Cocokkan versi Android, SDK, fingerprint, patch keamanan dan properti versi One UI dengan klaim distributor; catat kontradiksi.
-- [ ] Inventarisasi APK/APEX/JAR, native libraries, ABI, symlink, permissions, file contexts, init dan fstab.
+**Gate 1:** Package identity and partition scope verified from binaries.
 
-**Output:** `inventory/packages.json`, inventory per kandidat, dan `reports/01-inventory.md`.
+## Phase 2 — Understanding the `pipa` Baseline
 
-**Gate 1:** Identitas paket dan cakupan image diketahui. Label `64_32` tidak diperlakukan sebagai bukti lengkap dukungan ABI tanpa pemeriksaan isi.
+- [x] Map component origins: Samsung userspace, `pipa` vendor/ODM, boot/kernel (`4.19.246-N0-kernel+`), DTBO.
+- [x] Identify device-specific patches in init, properties, fstab, VINTF, SELinux, overlays, native binaries (`btaudio-hal-xiima`, `xiaomi-touch`, `auto_audio_switch.sh`).
+- [x] Record display, density (`280`), audio routing, pen/keyboard, and baseline known bugs.
 
-## Fase 2 — Memahami baseline pipa
+**Gate 2:** `pipa` hardware components and boot dependencies mapped.
 
-- [ ] Petakan asal komponen: Samsung userspace, vendor/ODM pipa, boot/kernel, DTBO dan modul bila ada.
-- [ ] Identifikasi patch device-specific pada init, properties, fstab, VINTF, SELinux, overlay, framework dan native library.
-- [ ] Catat layanan Samsung yang dihapus, diganti atau dinonaktifkan dan alasan yang bisa dibuktikan.
-- [ ] Rekam konfigurasi display, density, refresh rate, taskbar, multiwindow, rotasi, audio dan input aksesori.
-- [ ] Bedakan perilaku baseline yang teruji di perangkat dari klaim changelog atau inferensi statis.
-- [ ] Jika tersedia firmware Samsung asal baseline, lakukan diff terhadap sumber itu untuk mengisolasi patch port. Tanpa sumber, jangan menyebut seluruh perbedaan sebagai patch pipa.
+## Phase 3 — Donor Compatibility Matrix
 
-**Output:** `reports/02-baseline-pipa.md` dan katalog patch baseline dengan tingkat keyakinan.
+Audited `D2` against `B0`:
 
-**Gate 2:** Komponen hardware pipa dan dependensi boot baseline terpetakan; ketidakpastian yang tersisa terdokumentasi.
-
-## Fase 3 — Matriks kompatibilitas donor
-
-Audit setiap donor terhadap B0, bukan sekadar donor terhadap donor.
-
-| Area | Pemeriksaan | Bukti yang dicatat |
+| Area | Check | Outcome / Findings |
 | --- | --- | --- |
-| Framework ↔ vendor | VINTF manifest/matrix, FCM, deklarasi HAL, VNDK/linker namespace bila relevan | Konflik spesifik dan hasil tool pemeriksa |
-| Native/ABI | Arsitektur ELF, dependensi library, simbol yang diperlukan, library yang hilang | File dan simbol konkret |
-| Kernel ↔ userspace | Versi/config kernel aktual, BPF dan fitur yang diperlukan, modul | Config/simbol/log; bukan tebakan dari versi Android |
-| Graphics | Composer, allocator/mapper/gralloc, EGL/Vulkan dan SurfaceFlinger | Interface yang diminta dibanding yang disediakan |
-| Boot/init | Boot image header/ramdisk bila tersedia, mount, fstab, enkripsi dan AVB | Perbedaan konfigurasi dan kebutuhan penyesuaian |
-| SELinux | Policy split/version, contexts dan domain layanan | Konflik kompilasi/validasi atau AVC saat uji |
-| Samsung services | Dependensi Knox, hardware Samsung, framework/vendor service | Pemanggil, dependency dan kemungkinan dampak |
-| Tablet UX | Overlay, launcher, taskbar, multiwindow/DeX jika tersedia, density dan fitur layar besar | Resource/konfigurasi yang benar-benar ada |
-| Packaging | Kapasitas super/logical partitions, format filesystem dan installer | Ukuran serta batas aktual pipa |
+| Framework ↔ Vendor | VINTF manifests/matrices, FCM levels, HAL clients, VNDK (`v30..v34`) | All required HAL clients present; vendor FCM level 5 vs donor level 7+ non-fatal at boot |
+| Native / ABI | ELF architectures, shared library dependencies | `64_32` verified; overlay binaries link cleanly |
+| Kernel ↔ Userspace | Kernel 4.19.246 config, BPF, EROFS, cgroups | Required fixes [0001](patches/0001-port95-erofs-fill_symlink-read-inline-data-from-next-block.patch)–[0003](patches/0003-port95-erofs-use-C-LZ4-decoder-instead-of-lz4armv8-inplace.patch); `traced` cgroup `+memory` fails on 4.19 |
+| Graphics | Composer 2.4, Mapper 3.0/4.0, EGL/Vulkan, SurfaceFlinger | Boots to UI cleanly (`D2` `gralloc4` adaptation compatible with `B0` vendor) |
+| Boot / Init | `vendor_boot` fstab, first-stage mount, encryption, AVB | Boots with `/data` unencrypted `f2fs`; `vold` `/data/sec_pass/0` FBE errors non-fatal |
+| SELinux | Split policy compile (`secilc`), runtime mode | Boots in `Permissive`; all-domain permissive CIL appended offline |
+| Samsung Services | Knox, Device Care (`lool`), Camera/Clock/Gallery/Routines | `D2` stripped several apps (`lool`, `routines`, `forest`, `clockpackage`, `camera`) → Settings/Menu gaps |
+| Tablet UX | Characteristics, density, lockscreen rotation, QS width, SIM UI | Still configured as `phone` / `213dpi` in `D2`; needs tablet UX patching |
+| Packaging | Live `super` LP layout vs `system_a`/`vendor_a`/`odm_a` sizes | Re-laid out `qti_dynamic_partitions_a` cleanly while leaving `_b` & `sda35` untouched |
 
-- [ ] Periksa patch gralloc yang disebut D2 dari isi image atau source pembuat jika tersedia; jangan menganggap kredit patch sebagai bukti kompatibilitas pipa.
-- [ ] Pisahkan patch generik GSI dari penyesuaian khusus donor dan penyesuaian yang diperlukan pipa.
-- [ ] Jangan menggabungkan framework/JAR/APEX lintas build secara acak; petakan dependensi sebelum setiap transplantasi.
+**Gate 3:** Blockers, reusable patches, and runtime verification items documented.
 
-**Output:** `reports/03-compatibility-matrix.md`; setiap temuan diberi status **terverifikasi / indikasi / belum diketahui**.
+## Phase 4 — Port Path Decision
 
-**Gate 3:** Setiap donor memiliki daftar blocker, patch yang mungkin dipakai ulang, dan kebutuhan pengujian runtime.
+Compared options:
+1. **Tablet firmware `D1` → `pipa`:** One UI 9.0, does not meet One UI 9.5 target; no GSI patches.
+2. **XGSI `D2` → `pipa`:** One UI 9.5 (`64_32`, Android 17), boots on `pipa` kernel/vendor after EROFS/BPF kernel fixes; requires tablet UX & missing Samsung package restoration (unless a tablet One UI 9.5 `64_32` XGSI becomes available).
 
-## Fase 4 — Keputusan jalur port
+**Gate 4:** `D2` explicitly selected as initial system base.
 
-Bandingkan dua opsi berdasarkan hasil audit:
+## Phase 5 — Implementation and Offline Validation
 
-1. **Firmware tablet D1 → pipa:** mempertahankan basis UI tablet dan membawa ulang patch pipa yang relevan.
-2. **GSI D2 → pipa:** memanfaatkan adaptasi GSI untuk eksperimen 9.5; tetap mengaudit integrasi hardware dan UX tablet.
+- [x] Built reproducible offline tooling (`scripts/port95_build.py`, `scripts/erofs95.py`, `scripts/erofs95_repro.py`, `scripts/lprelayout.py`, `scripts/backup_slot_a_boot.sh`, `scripts/flashplan.py`, `scripts/sepolicy_permissive.py`).
+- [x] Applied tracked kernel patches (`0001`–`0003`) and incremental overlays (`reports/port95/README.md`, `reports/port95/bpf-backport/README.md`).
+- [x] Preserved permissions, ownership, symlinks, and SELinux contexts during EROFS `v1.8.9` repack (`metadata+content identical`, `fsck.erofs rc=0`, 689/689 domains permissive).
+- [x] Validated per-partition live `pipa` Slot A sizes and built Slot A LP re-layout validator (`scripts/lprelayout.py`) protecting GPT, `sda34`, `sda35`, and Slot B.
+- [x] Generated Gate 5 offline verification manifest (`reports/port95/gate5-slot-a-manifest.json`, local only).
 
-Target tetap One UI 9.5. Jika semua jalur terblokir, hasilnya dilaporkan sebagai blocker, bukan turun ke One UI 9.
+**Gate 5:** Artifacts passed offline validation with explicit rollback procedure (`B0` Slot A images).
 
-- [ ] Nilai peluang boot berdasarkan bukti, kelengkapan tablet UX, kompatibilitas kernel/vendor, kemudahan debug dan asal patch.
-- [ ] Pilih satu target awal; hindari mengerjakan banyak donor sekaligus sebelum memperoleh log boot pertama.
-- [ ] Tentukan komponen yang dipertahankan, diganti, diadaptasi atau tidak didukung.
-- [ ] Buat backlog patch per blocker dan rencana uji masing-masing.
+## Phase 6 — Device Test Preparation (Approval Required)
 
-**Output:** `reports/04-donor-decision.md` berisi pilihan, alasan, risiko dan batas scope.
+- [x] Confirmed device identity (`pipa`, `78589d57`), unlocked bootloader, Slot A active, live partition/LP layout dumped.
+- [x] Backed up live Slot A boot partitions externally (`Boot Attempt 1–3`).
+- [x] Prepared `B0` Slot A rollback path without touching Slot B, `/dev/sda35` Linux, GPT, or bootloader firmware.
+- [x] Verified logging paths (Wireless ADB, `logcat`, `dmesg`, `pstore` / `console-ramoops-0`).
 
-**Gate 4:** Donor dipilih secara eksplisit. Tidak ada klaim “siap flash” dari audit statis saja.
+**Forbidden:** Never flash bootloader/hardware firmware, overwrite Slot B (`*_b`) or `/dev/sda35`, relock the bootloader, or wipe `userdata`/`metadata` unless explicitly authorized.
 
-## Fase 5 — Implementasi dan validasi offline
+**Gate 6:** User explicitly approved Slot A bundle flash with backups and rollback path ready.
 
-- [x] Buat script patch/repack yang dapat diulang tanpa mengubah input asli (`scripts/port95_build.py`, `scripts/erofs95.py`, `scripts/erofs95_repro.py`).
-- [x] Terapkan perubahan kecil bertahap; catat sumber, alasan dan file yang disentuh (`reports/port95/README.md`, `reports/port95/bpf-backport/README.md`).
-- [x] Tangani permissions, ownership, symlink dan SELinux contexts saat repack (EROFS `v1.8.9` terverifikasi `metadata+content identical`, `fsck.erofs rc=0`, 689/689 domain permissive via `scripts/sepolicy_permissive.py`).
-- [ ] Validasi ukuran partisi terhadap layout live `pipa` **per partisi**, bukan total vs seluruh `super`. In-place (extent live, aturan `scripts/flashplan.py`) **tidak muat**: `product_a`, `vendor_a`, `odm_a` melebihi extent live (`GATE5-REPORT.md` §4). Total `7,004,303,360 B` vs `super` `9,126,805,504 B` hanya batas atas, bukan bukti muat. Physical `boot_a`/`vendor_boot_a`/`dtbo_a` sama persis dengan ukuran GPT. Filesystem, konfigurasi mount dan VINTF/HAL sudah diperiksa offline.
-- [ ] Rencana re-layout LP grup `_a` saja (bukan `lpmake` super utuh): validator wajib menjaga GPT, `sda34` userdata, `sda35` Linux, entri/grup slot B dan header metadata. Tanpa validator itu, `flashplan.py` menolak resize (`shared-super`).
-- [x] Hasilkan manifest artifact, checksum, daftar perubahan serta daftar keterbatasan final untuk Gate 5 (`reports/port95/gate5-slot-a-manifest.json`, lokal saja).
+## Phase 7 — Bring-up and Regression Testing
 
-**Gate 5:** Artifact lolos pemeriksaan offline dan memiliki prosedur pengujian serta rollback yang spesifik. Lolos gate ini belum membuktikan boot.
+Milestones:
 
-## Fase 6 — Persiapan uji perangkat (memerlukan persetujuan)
+- [x] **M1:** Kernel/init boots, all partitions mount, boot logs collected.
+- [x] **M2:** Zygote, SurfaceFlinger, and `system_server` run stably to boot completion (`sys.boot_completed=1`, `bpf.progs_loaded=1`, `0` EROFS errors).
+- [x] **M3:** Display/SurfaceFlinger/SystemUI/Launcher render (`1800x2880`); touch input and Wireless ADB (`uid=0`) work.
+- [ ] **M4:** Setup, storage/Settings menus (`com.samsung.android.lool`), USB ADB (`host_connected`), and clean daemon state (`traced` crash-loop resolved, `vold`/RIL noise reduced).
+- [ ] **M5:** Hardware and tablet UX parity check against `B0`:
+  - **Display & Tablet UX:** `ro.build.characteristics=tablet`, `ro.sf.lcd_density=280` (currently `213`), lockscreen landscape orientation, Quick Settings & Notification panel tablet width, `About tablet` & Wi-Fi-only identity (no `Available SIM` / `IMEI Unknown` / `Phone` icon), `floating_feature` cleanup (remove `S948B` punchhole/ultrasonic-FP/edge flags).
+  - **Audio:** quad Awinic speakers (`aw882xx` active), mic, Bluetooth audio (`btaudio-hal-xiima`), and output routing (`auto_audio_switch.sh`).
+  - **Wi-Fi / Bluetooth:** `wlan0` (`v5.2.022.12B`) active; verify Bluetooth pairing persistence across sleep/reboot.
+  - **Camera:** verify front/rear camera HALs & add compatible Camera/Gallery apps if stripped by donor.
+  - **Input:** touch (`NVT-ts`), hardware keys, pen (`switch_pen_input_device` / Mi Smart Pen), keyboard nanoapp, hall sensor, auto-rotate (`sensors@1.0-service` active).
+  - **Power:** charging, battery telemetry (`healthd`), deep sleep, wake, and thermals.
+  - **USB:** fix `xgsi-usb.rc` / USB HAL sync so wired ADB (`adb -d`) & MTP work (`host_connected=false` in Attempt 3).
+  - **Security:** actual SELinux mode (`Permissive`), encryption status (`noenc` `/data`), SukiSU root binary (`su` availability vs ADB root).
+- [ ] **M6:** Stability, sleep/wake cycling, idle battery drain, and thermal testing.
 
-- [ ] Konfirmasi perangkat benar-benar pipa, bootloader unlocked, slot/layout partisi dan keadaan recovery/fastboot aktual.
-- [ ] Pastikan baseline diketahui bekerja pada perangkat yang diuji.
-- [ ] Cadangkan data penting dan partisi relevan sesuai layout; simpan backup di luar perangkat.
-- [ ] Sediakan paket pemulihan pipa yang sesuai dan dokumentasikan cara kembali ke baseline.
-- [ ] Jelaskan kemungkinan wipe, kehilangan data, bootloop dan keterbatasan pemulihan sebelum pengguna menyetujui flashing.
-- [ ] Tentukan jalur pengambilan log: ADB/logcat, kernel log dan pstore bila tersedia.
+Every check must be labeled **PASS / FAIL / NOT TESTED / NOT APPLICABLE** with artifact SHA-256, reproduction steps, and logs.
 
-**Larangan:** jangan flash bootloader, firmware hardware, `vendor`, DTBO atau boot image Samsung ke pipa. Jangan relock bootloader dengan image modifikasi. Jangan mengubah AVB/enkripsi atau menulis partisi berdasarkan command generik yang belum dicocokkan ke perangkat.
+## Phase 8 — Reproducible Package and Handoff
 
-**Gate 6:** Pengguna menyetujui rencana flash yang menyebut artifact dan partisi secara tepat, dengan backup serta jalur recovery tersedia. Roadmap ini bukan persetujuan flashing.
+- [ ] Rebuild cleanly from documented inputs, overlays, patches, and scripts.
+- [ ] Publish complete input/output manifest, SHA-256 checksums, and `pipa` Slot-A-only flash/rollback instructions.
+- [ ] Document vendor/kernel prerequisites, known bugs, and recovery steps.
+- [ ] Attribute upstream patches/credits (`N0+`, `SukiSU`, `XGSI`, `btaudio-xiima`, etc.).
+- [ ] Clearly label build maturity (`experimental`, `bootable`, or `daily-driver`) from verified test results only.
 
-## Fase 7 — Bring-up dan uji regresi
+## Definition of Done
 
-Urutan milestone:
+### Audit Complete
+`B0` and donor inventories captured, baseline integration mapped, compatibility matrix and donor decision documented, open blockers recorded.
 
-- [ ] **M1:** kernel/init berjalan; mount partisi berhasil; log dapat diambil.
-- [ ] **M2:** zygote dan system_server stabil; tidak ada crash loop berulang.
-- [ ] **M3:** SurfaceFlinger/SystemUI/launcher tampil; touchscreen dan navigasi berfungsi.
-- [ ] **M4:** setup selesai, storage/dekripsi berfungsi dan reboot konsisten.
-- [ ] **M5:** uji hardware dan fungsi tablet terhadap B0.
-- [ ] **M6:** uji stabilitas, sleep/wake, idle drain dan thermal.
-
-Checklist M5:
-
-- Display: brightness, rotasi, refresh rate dan rendering GPU.
-- Audio: semua speaker, mikrofon, Bluetooth dan routing output.
-- Wi-Fi/Bluetooth: koneksi ulang setelah sleep dan reboot.
-- Kamera: depan/belakang, foto dan video; catat keterbatasan aplikasi.
-- Input: touch, tombol, keyboard/stylus jika tersedia, hall sensor dan auto-rotate.
-- Power: charging, indikator baterai, deep sleep, wake dan thermal.
-- USB: ADB, transfer file, OTG dan display output jika didukung setup uji.
-- UX tablet: landscape, taskbar, split-screen, popup window dan fitur DeX yang memang ditargetkan.
-- Keamanan: SELinux aktual, enkripsi, lockscreen dan patch level aktual; jangan memalsukan status sertifikasi.
-- Kompatibilitas aplikasi: APK sesuai ABI; DRM dan Play Integrity dilaporkan apa adanya, bukan dijanjikan.
-
-Setiap hasil diberi label **PASS / FAIL / NOT TESTED / NOT APPLICABLE**, disertai artifact hash, base vendor/kernel, langkah reproduksi dan log. Boot ke launcher bukan bukti siap daily driver.
-
-**Output:** `reports/05-bringup.md`, laporan regresi dan log yang disanitasi.
-
-## Fase 8 — Paket reproducible dan handoff
-
-- [ ] Build ulang dari input asli dan script yang terdokumentasi.
-- [ ] Rilis manifest input/output, SHA-256 dan instruksi instalasi spesifik pipa.
-- [ ] Dokumentasikan prasyarat vendor/firmware/kernel, known bugs dan rollback.
-- [ ] Cantumkan kredit serta lisensi patch yang digunakan; jangan mendistribusikan ulang bahan tanpa mempertimbangkan izin/lisensinya.
-- [ ] Pisahkan status experimental, bootable dan daily-driver berdasarkan hasil uji, bukan nama versi.
-
-## Definisi selesai
-
-### Audit selesai
-
-Inventory B0 dan donor tersedia; patch baseline terpetakan sejauh bukti memungkinkan; matriks kompatibilitas serta keputusan donor selesai; blocker dan ketidakpastian dicatat. **Tidak mensyaratkan flashing.**
-
-### Port eksperimental selesai
-
-Artifact reproducible tersedia, benar-benar diuji di pipa dengan persetujuan pengguna, hasil boot/hardware dicatat dan rollback terdokumentasi. Fitur yang belum diuji tetap diberi label demikian.
-
-## Langkah berikutnya setelah paket diunduh
-
-1. Berikan path absolut paket baseline port pipa dan kandidat donor, atau tempatkan di `inputs/` setelah `.gitignore` disiapkan.
-2. Sertakan link sumber baseline, instruksi instalasi dan known bugs jika ada.
-3. Mulai Fase 0–3 secara offline; jangan flash apa pun sebelum keputusan donor dan kesiapan pemulihan disepakati.
+### Experimental Port Complete
+Reproducible artifacts built, tested on real `pipa` hardware with user approval, hardware/UX regression results recorded with verified logs, and rollback steps documented.
