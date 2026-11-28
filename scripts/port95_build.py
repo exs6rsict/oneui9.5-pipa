@@ -79,31 +79,80 @@ def append_cmds(img, dest, text, local):
             f'set_inode_field "{dest}" gid {gid}', f'ea_set -f "{label}" "{dest}" security.selinux']
 
 
-def apply_overlay(img, overlay, props, tmp, appends=None):
+def existing_meta(img, dest, tmp, tag):
+    """(mode, uid, gid, label_file, label) of dest in the image, or None if it does not exist."""
+    stat = run("debugfs", "-R", f'stat "{dest}"', img)
+    if "Inode:" not in stat:
+        return None
+    label = os.path.join(tmp, f"{tag}.label")
+    run("debugfs", "-R", f'ea_get -f "{label}" "{dest}" security.selinux', img)
+    if not os.path.exists(label) or os.path.getsize(label) == 0:
+        raise RuntimeError(f"cannot read the SELinux label of {dest}; refusing to relabel blindly")
+    mode = int(re.search(r"Mode:\s+(\d+)", stat).group(1), 8)
+    uid, gid = (int(x) for x in re.search(r"User:\s+(\d+)\s+Group:\s+(\d+)", stat).groups())
+    with open(label, "rb") as f:
+        return mode, uid, gid, label, f.read().rstrip(b"\0").decode()
+
+
+def plan_overlay(img, overlay, tmp, new_dirs=(), remove=()):
+    """[(src, dest, mode, uid, gid, label_file, label)]: a file the image already has keeps its own mode, owner and
+    label (e.g. cgroups.json is cgroup_desc_file); a new one is system_file, root-owned, shell group if executable."""
     label = os.path.join(tmp, "label")
     with open(label, "wb") as f:
         f.write(SYSTEM_FILE.encode() + b"\0")
-    cmds = []
-    for src, dest in overlay_files(overlay):
-        mode = os.stat(src).st_mode & 0o7777
+    for r in remove:
+        if "Type: regular" not in run("debugfs", "-R", f'stat "{r}"', img):
+            raise ValueError(f"cannot remove missing {r} (only regular files are removed)")
+    for d in new_dirs:
+        if "Inode:" in run("debugfs", "-R", f'stat "{d}"', img):
+            raise ValueError(f"new dir already exists: {d}")
+    plan = []
+    for i, (src, dest) in enumerate(overlay_files(overlay)):
+        old = existing_meta(img, dest, tmp, f"old{i}")
+        if old:
+            plan.append((src, dest, *old))
+        else:
+            mode = os.stat(src).st_mode & 0o7777
+            plan.append((src, dest, mode, 0, SHELL_GID if mode & 0o111 else 0, label, SYSTEM_FILE))
+    return plan, label
+
+
+def apply_overlay(img, overlay, props, tmp, appends=None, new_dirs=(), remove=()):
+    plan, label = plan_overlay(img, overlay, tmp, new_dirs, remove)
+    cmds = [f'rm "{r}"' for r in remove]
+    for d in new_dirs:  # parents first, as listed
+        cmds += [f'mkdir "{d}"', f'set_inode_field "{d}" mode 040755', f'set_inode_field "{d}" uid 0',
+                 f'set_inode_field "{d}" gid 0', f'ea_set -f "{label}" "{d}" security.selinux']
+    for src, dest, mode, uid, gid, lab, _l in plan:
         cmds += [f'rm "{dest}"', f'cd "{os.path.dirname(dest)}"',
                  f'write "{src}" "{os.path.basename(dest)}"',
                  f'set_inode_field "{dest}" mode 0{0o100000 | mode:o}',
-                 f'set_inode_field "{dest}" uid 0',
-                 f'set_inode_field "{dest}" gid {SHELL_GID if mode & 0o111 else 0}',
-                 f'ea_set -f "{label}" "{dest}" security.selinux']
+                 f'set_inode_field "{dest}" uid {uid}',
+                 f'set_inode_field "{dest}" gid {gid}',
+                 f'ea_set -f "{lab}" "{dest}" security.selinux']
     for i, (dest, text) in enumerate(append_texts(props, appends)):
         cmds += append_cmds(img, dest, text, os.path.join(tmp, f"append{i}"))
     debugfs_write(img, cmds)
+    return plan
 
 
-def verify_overlay(img, overlay, props, tmp, appends=None):
+def verify_overlay(img, overlay, props, tmp, appends=None, plan=(), new_dirs=(), remove=()):
     """debugfs exits 0 even if a command failed, so every write is read back and compared."""
-    for i, (src, dest) in enumerate(overlay_files(overlay)):
+    for r in remove:
+        if "Inode:" in run("debugfs", "-R", f'stat "{r}"', img):
+            raise RuntimeError(f"remove readback failed: {r} still exists")
+    for d in new_dirs:
+        stat = run("debugfs", "-R", f'stat "{d}"', img)
+        if ("Type: directory" not in stat or "Mode:  0755" not in stat or f'"{SYSTEM_FILE}\\000"' not in stat
+                or not re.search(r"User:\s+0\s+Group:\s+0\s", stat)):
+            raise RuntimeError(f"new dir readback failed for {d}")
+    for i, (src, dest, mode, uid, gid, _lab, label) in enumerate(plan):
         got = os.path.join(tmp, f"readback{i}")
         run("debugfs", "-R", f'dump "{dest}" "{got}"', img)
         stat = run("debugfs", "-R", f'stat "{dest}"', img)
-        if not os.path.exists(got) or sha256(got) != sha256(src) or f'"{SYSTEM_FILE}\\000"' not in stat:
+        if (not os.path.exists(got) or sha256(got) != sha256(src) or f'"{label}\\000"' not in stat
+                or f"Mode:  {mode:04o}" not in stat
+                or not re.search(rf"User:\s+{uid}\s+Group:\s+{gid}\s", stat)):
             raise RuntimeError(f"overlay readback failed for {dest}")
     for i, (dest, text) in enumerate(append_texts(props, appends)):
         got = os.path.join(tmp, f"append-readback{i}")
@@ -113,7 +162,8 @@ def verify_overlay(img, overlay, props, tmp, appends=None):
                 raise RuntimeError(f"append readback failed for {dest}")
 
 
-def build(donor_system, vendor, odm, overlay, props, workdir, out_super, super_size, group, appends=None):
+def build(donor_system, vendor, odm, overlay, props, workdir, out_super, super_size, group, appends=None,
+          new_dirs=(), remove=()):
     os.makedirs(workdir, exist_ok=True)
     system = os.path.join(workdir, "system_a.img")
     shutil.copyfile(donor_system, system)
@@ -122,14 +172,14 @@ def build(donor_system, vendor, odm, overlay, props, workdir, out_super, super_s
     new_size = -(-(os.path.getsize(system) + extra) // 4096) * 4096
     run("resize2fs", system, f"{new_size // 1024}K")  # growing adds block groups, hence free inodes
     with tempfile.TemporaryDirectory(dir=workdir) as tmp:
-        apply_overlay(system, overlay, props, tmp, appends)
-        verify_overlay(system, overlay, props, tmp, appends)
+        plan = apply_overlay(system, overlay, props, tmp, appends, new_dirs, remove)
+        verify_overlay(system, overlay, props, tmp, appends, plan, new_dirs, remove)
     run("e2fsck", "-fn", system)  # read-only check; non-zero exit raises
     parts = {"system_a": system, "vendor_a": vendor, "odm_a": odm}
     if out_super is None:  # partition image only: no LP metadata is produced
         return {"partitions": {"system_a": {"image": system, "size": os.path.getsize(system), "sha256": sha256(system)}},
                 "props": props, "appends": sorted(appends or {}), "overlay": [d for _, d in overlay_files(overlay)],
-                "verified": {"e2fsck": "clean", "overlay_readback": "match"}}
+                "new_dirs": list(new_dirs), "removed": list(remove), "verified": {"e2fsck": "clean", "overlay_readback": "match"}}
     args = ["lpmake", "--metadata-size", "65536", "--metadata-slots", "3", "--super-name", "super",
             "--device", f"super:{super_size}", "--group", f"{group}_a:{super_size}",
             "--group", f"{group}_b:{super_size}", "--virtual-ab", "--sparse", "--output", out_super]
@@ -149,7 +199,7 @@ def build(donor_system, vendor, odm, overlay, props, workdir, out_super, super_s
             "super": {"path": out_super, "size": os.path.getsize(out_super), "sha256": sha256(out_super),
                       "device_size": super_size, "layout": layout},
             "props": props, "appends": sorted(appends or {}), "overlay": [d for _, d in overlay_files(overlay)],
-            "verified": {"e2fsck": "clean", "overlay_readback": "match", "super_roundtrip": "match"}}
+            "new_dirs": list(new_dirs), "removed": list(remove), "verified": {"e2fsck": "clean", "overlay_readback": "match", "super_roundtrip": "match"}}
 
 
 def main(argv=None):

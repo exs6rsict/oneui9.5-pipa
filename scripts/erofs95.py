@@ -172,6 +172,8 @@ def build(img, out, work, compress="lz4hc"):
     manifest, staged = scan(img, os.path.join(work, "stage"))
     tar_path = os.path.join(work, "system.tar")
     write_tar(manifest, staged, tar_path)
+    # mkfs.erofs --tar=f copies all data into a sparse buffer at 1 TiB inside `out`: drop the stage first
+    shutil.rmtree(os.path.join(work, "stage"))
     r = subprocess.run(["mkfs.erofs", f"-z{compress}", "--tar=f", f"-T{MTIME}", out, tar_path],
                        capture_output=True, text=True)
     if r.returncode:
@@ -373,6 +375,7 @@ def main(argv=None):
     img, out, work, report, *readback = argv if argv is not None else sys.argv[1:]
     os.makedirs(report, exist_ok=True)
     expected = build(img, out, work)
+    os.remove(os.path.join(work, "system.tar"))  # ~ the ext4 payload; free it before fsck extracts a copy
     v = verify(expected, out, os.path.join(work, "readback"))
     got = v.pop("manifest")
     fs_config, contexts = derived_configs(expected)

@@ -1,6 +1,6 @@
 # One UI 9.5 `pipa` — Engineering Checkpoint
 
-## Status (2026-11-28)
+## Status (2026-11-29)
 
 Offline audit tooling, image assembly, BPF + `vgate` (`5.15.136`) backports, EROFS `v1.8.9` repack, and Gate 6 Slot A preparation (`scripts/lprelayout.py`, `scripts/backup_slot_a_boot.sh`) completed, followed by three Gate 6 hardware boot attempts on `pipa` Slot A:
 
@@ -12,6 +12,13 @@ Offline audit tooling, image assembly, BPF + `vgate` (`5.15.136`) backports, ERO
   1. **Missing Settings menus (`Device care`, `Battery`, `Storage`, `Modes and Routines`, `Digital Wellbeing`)**: `logcat-boot3.txt` shows `Settings: Package not found : com.samsung.android.lool` because `SmartManager` (`com.samsung.android.lool`) and several Samsung apps (`Routines`, `DigitalWellbeing`, `ClockPackage`, `SamsungCamera`, `SamsungGallery2018`) were stripped from the `D2` XGSI base (`Menu not currently available.` toast when opening `Storage` via Search).
   2. **Phone UX & DPI mismatch**: `/system/build.prop` still sets `ro.build.characteristics=phone`, `SM-S948B`, `ro.ims.device_category=phone`, phone `floating_feature.xml` entries (`ultrasonic_display_phone`, `PUNCHHOLE_VI`, `COMMON_CONFIG_EDGE=panel`), and lacks `ro.sf.lcd_density=280` (running at `213dpi`). This causes sideways/portrait Lock screen (`KeyguardClockPositionManager: error size mismatch size=2880.0x1800.0`, `KeyguardClockInteractor: No clock is available`), narrow centered Quick Settings & Notification panel, and `About phone` / `Available SIM` / `IMEI Unknown` / `Phone` icon.
   3. **Daemon / service noise**: `traced` 5s crash-loop (`Activation of cgroup controller +memory failed in path /sys/fs/cgroup/system/uid_9999: Invalid argument` triggering `UPDATABLE_CRASHING`), `vold` (`FsCrypt: Failed to prepare /data/sec_pass/0`, `cryptfs init_user0 Failed: Status(-8)`, 656x `Open failed`), RIL/lazy-AIDL polling spam (`ISehChannel/imsd`, `ISehRealTimeToken`, `ISehWidevineKeyProv`, `ISehSem`, `KNOXNATIVE`), and wired USB ADB `host_connected=false` despite `kernel_state=CONFIGURED`.
+
+- **Staged next candidates (offline-verified, NOT YET FLASHED; `artifacts/gate6-flash-bundle/` unchanged, `boot_a.img` still `6fb3aba4...`):**
+  - **Option B:** `artifacts/port95-option-b/system_a.img` (`4,700,540,928` B, SHA-256 `b555d6a9da78ba3186c0b7cd2bb932aa34a10aa893ca5fb6a7f87c096d5284ac`; EROFS lz4hc, `metadata+content identical`, `fsck.erofs rc=0`, fits the live `system_a` extent) and runtime-only SukiSU test module `artifacts/option-b-test-module/port95_optionb-v1-test.zip` (`247,827,326` B, `2655bcd87df7bec3dde43384b8a880ccd508aae04025d130e3c02b747d1af13f`). Known caveat: B0 `SmartManager_v5` / `SamsungGallery2018` call `semIsInputMethodShown()`, removed in One UI 9.5.
+  - **SukiSU Manager App Profile root cause:** `TemporaryRoot.saveProfile` spawns `libksud.so temporary-root apply`; since `[ksu_driver]` FDs are `O_CLOEXEC`, `libksud.so` re-acquires one via `syscall(SYS_reboot, 0xDEADBEEF, 0xCAFEBABE, 0, &fd)`. N0 `kernel/reboot.c` never called `ksu_handle_sys_reboot`, so the request fell through to the normal reboot path. Fix: `work/port95/kernel-rebuild/recipe/0004-port95-reboot-add-ksu_handle_sys_reboot-hook.patch`.
+  - **`ksureboot` kernel** (`vps-build-ksureboot.sh`, N0 `8c32fb4` + SukiSU `adf6e86d` + `0001`–`0004` + BPF queue + patches `0001`–`0003`; VPS `2026-11-28`, `9m45s`): `0` errors; `59` warnings, the same count as `gate6fix` (none in `kernel/reboot.c`); `reboot.o` references `ksu_handle_sys_reboot`, which `System.map` lists as local `t` like every other `ksu_handle_*` hook; `bpf_for_each_map_elem`, `bpf_get_netns_cookie_sockopt_proto`, `bpf_get_netns_cookie_sock_ops_proto`, `z_erofs_lz4_decompress` present. `Image` `d86ff0e4...`, `Image.gz` `1aa16362...`, `System.map` `9991032e...`, `.config` `da9e2deb...` (`work/port95/kernel-rebuild/artifacts-ksureboot/SHA256SUMS`).
+  - **Candidate `work/port95/kernel-rebuild/boot-artifacts/boot_a-n0-sukisu-bpf-vgate-ksureboot.img`** (`201,326,592` B, `39247cd703ea772a6ef15a01bd81140959bd6812d4b74ea1733e09b277c854db`): baseline round-trip byte-identical, header/cmdline/OS fields and ramdisk identical, kernel equals `ksureboot` `Image`, AVB `NONE` footer with baseline salt `89fda7fb...` (`repack-ksureboot-20261129-001540.log`).
+  - **Diagnostic Log Collector APK (`tools/log-reporter/`):** built & signed v1+v2+v3 (`artifacts/log-reporter/OneUI95-LogReporter.apk`, `20,883` B, `com.pipa.port95.logreporter`, SHA-256 `6e70c0bad5456ebcd08ffc61f04f40092a20f8fbccc75cdb3ad8c38583f20763`), collecting `logcat -b all`, `dmesg`, `pstore`, props, mounts, USB/thermal sysfs, packages/overlays, and `dumpsys` into one shareable `.zip` (`su -c` with `sh -c` fallback; untested on hardware).
 
 Binary artifacts, Flash bundles, and extracted ROM trees remain excluded from Git.
 
@@ -30,9 +37,11 @@ Binary artifacts, Flash bundles, and extracted ROM trees remain excluded from Gi
 - `scripts/sepolicy_permissive.py`: Offline all-domain permissive CIL policy generator and `secilc` check.
 - `scripts/erofs95.py` / `scripts/erofs95_repro.py`: ext4-to-EROFS PAX repack, independent decode verification (`erofs-utils 1.8.9+`), and diskbuf offset regression reproducer.
 - `scripts/lprelayout.py`: Slot A LP re-layout validator preserving GPT, `/dev/sda34`, `/dev/sda35`, Slot B, and LP headers.
+- `scripts/apkcompat.py`: Static DEX, AndroidManifest, signing certificate, ARSC, and priv-app permission compatibility checks.
 - `scripts/backup_slot_a_boot.sh` / `scripts/dump_live_layout.sh` / `scripts/flashplan.py`: Read-only backup helpers and A-only flash plan validator.
+- `tools/log-reporter/`: Zero-dependency Java Android APK source & VPS build script (`com.pipa.port95.logreporter`).
 
-Test execution with local EROFS tools in `PATH` (`tests/`, 58 tests verified prior to Attempt 3 docs sync):
+Test execution with local EROFS tools in `PATH` (`tests/`, 90 tests pass as of 2026-11-29; 19 skip when local EROFS tools are absent from `PATH`):
 
 ```sh
 PATH="$PWD/work/port95/tools/root/usr/bin:$PATH" \

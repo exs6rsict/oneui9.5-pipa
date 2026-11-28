@@ -2,7 +2,7 @@
 
 Seams: ext4_manifest (what the trusted ext4 reader sees), build (the repack), erofs_manifest (an
 independent on-disk EROFS reader + fsck extraction), compare (the verdict). Expected values are literals."""
-import os, shutil, struct, subprocess, sys, tarfile, tempfile, unittest
+import json, os, shutil, struct, subprocess, sys, tarfile, tempfile, unittest, unittest.mock
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
 import erofs95
 
@@ -102,6 +102,28 @@ class ErofsRoundTripTest(Ext4ManifestTest):
         diffs = erofs95.compare(expected, erofs95.erofs_manifest(lossy, os.path.join(self.d, "rb2")))
         self.assertIn("/bin/tool: xattrs differ", diffs)
         self.assertIn("/: xattrs differ", diffs)
+
+    def test_build_frees_staged_data_before_mkfs_runs(self):
+        work, seen, real = os.path.join(self.d, "work"), [], subprocess.run
+
+        def spy(cmd, **kw):  # disk peak: mkfs.erofs keeps an uncompressed copy, so stage must already be gone
+            seen.append((cmd[0], os.path.exists(os.path.join(work, "stage"))))
+            return real(cmd, **kw)
+        with unittest.mock.patch.object(erofs95.subprocess, "run", spy):
+            erofs95.build(self.img, os.path.join(self.d, "m.erofs"), work)
+        self.assertIn(("mkfs.erofs", False), seen)
+        self.assertTrue(os.path.isfile(os.path.join(work, "system.tar")))
+
+    def test_main_frees_staged_data_and_tar_before_verifying(self):
+        work, report = os.path.join(self.d, "work"), os.path.join(self.d, "report")
+        rc = erofs95.main([self.img, os.path.join(self.d, "m.erofs"), work, report, "/bin/tool"])
+        self.assertEqual(rc, 0)
+        self.assertFalse(os.path.exists(os.path.join(work, "stage")))
+        self.assertFalse(os.path.exists(os.path.join(work, "system.tar")))
+        with open(os.path.join(report, "result.json")) as f:
+            r = json.load(f)
+        self.assertEqual(r["verdict"], "metadata+content identical")
+        self.assertEqual(r["readback"]["/bin/tool"]["ext4"], r["readback"]["/bin/tool"]["erofs"])
 
     def test_verify_reports_data_less_compressed_inode_even_when_fsck_exits_0(self):
         work, out = os.path.join(self.d, "work"), os.path.join(self.d, "bad.erofs")

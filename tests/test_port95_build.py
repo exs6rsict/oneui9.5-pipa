@@ -100,6 +100,69 @@ class BuildRecipeTest(unittest.TestCase):
         self.assertNotIn("super", m)
         self.assertFalse(os.path.exists(self.p("super.img")))
 
+    def test_replacing_a_file_keeps_its_label_owner_and_mode(self):
+        desc = self.p("desc")
+        with open(desc, "wb") as f:
+            f.write(b"u:object_r:cgroup_desc_file:s0\0")
+        subprocess.run(["debugfs", "-w", "-f", "-", self.donor], check=True, capture_output=True, text=True,
+                       input=f"ea_set -f {desc} /system/build.prop security.selinux\n"
+                             "set_inode_field /system/build.prop mode 0100600\n"
+                             "set_inode_field /system/build.prop gid 1000\n")
+        with open(self.p("overlay", "system", "build.prop"), "w") as f:
+            f.write("ro.build.characteristics=tablet\n")
+        os.chmod(self.p("overlay", "system", "build.prop"), 0o755)  # local mode must not leak into the image
+        m = port95_build.build(donor_system=self.donor, vendor=self.p("vendor.img"), odm=self.p("odm.img"),
+                               overlay=self.p("overlay"), props={}, workdir=self.p("work"), out_super=None,
+                               super_size=128 << 20, group="qti_dynamic_partitions")
+        img = m["partitions"]["system_a"]["image"]
+        stat = subprocess.run(["debugfs", "-R", "stat /system/build.prop", img], capture_output=True, text=True).stdout
+        self.assertIn("Mode:  0600", stat)
+        self.assertIn("Group:  1000", stat)
+        self.assertIn('security.selinux (31) = "u:object_r:cgroup_desc_file:s0\\000"', stat)
+        got = subprocess.run(["debugfs", "-R", "cat /system/build.prop", img], capture_output=True).stdout
+        self.assertEqual(got, b"ro.build.characteristics=tablet\n")
+
+    def test_new_dirs_are_created_root_owned_0755_system_file(self):
+        os.makedirs(self.p("overlay", "system", "priv-app", "SmartManager_v5"))
+        with open(self.p("overlay", "system", "priv-app", "SmartManager_v5", "SmartManager_v5.apk"), "wb") as f:
+            f.write(b"PK\3\4" + b"x" * 9000)
+        os.chmod(self.p("overlay", "system", "priv-app", "SmartManager_v5", "SmartManager_v5.apk"), 0o644)
+        m = port95_build.build(donor_system=self.donor, vendor=self.p("vendor.img"), odm=self.p("odm.img"),
+                               overlay=self.p("overlay"), props={}, workdir=self.p("work"), out_super=None,
+                               super_size=128 << 20, group="qti_dynamic_partitions",
+                               new_dirs=["/system/priv-app", "/system/priv-app/SmartManager_v5"])
+        img = m["partitions"]["system_a"]["image"]
+        run = lambda c: subprocess.run(["debugfs", "-R", c, img], capture_output=True, text=True).stdout
+        for d in ("/system/priv-app", "/system/priv-app/SmartManager_v5"):
+            stat = run(f"stat {d}")
+            self.assertIn("Type: directory", stat)
+            self.assertIn("Mode:  0755", stat)
+            self.assertRegex(stat, r"User:\s+0\s+Group:\s+0\s")
+            self.assertIn(f'security.selinux (26) = "{LABEL}\\000"', stat)
+        stat = run("stat /system/priv-app/SmartManager_v5/SmartManager_v5.apk")
+        self.assertIn("Mode:  0644", stat)
+        self.assertRegex(stat, r"User:\s+0\s+Group:\s+0\s")
+        self.assertEqual(m["new_dirs"], ["/system/priv-app", "/system/priv-app/SmartManager_v5"])
+
+    def test_new_dir_that_already_exists_is_refused(self):
+        with self.assertRaisesRegex(ValueError, "already exists: /system/bin"):
+            port95_build.build(donor_system=self.donor, vendor=self.p("vendor.img"), odm=self.p("odm.img"),
+                               overlay=self.p("overlay"), props={}, workdir=self.p("work"), out_super=None,
+                               super_size=128 << 20, group="qti_dynamic_partitions", new_dirs=["/system/bin"])
+
+    def test_remove_deletes_listed_files_and_refuses_missing_ones(self):
+        m = port95_build.build(donor_system=self.donor, vendor=self.p("vendor.img"), odm=self.p("odm.img"),
+                               overlay=self.p("overlay"), props={}, workdir=self.p("work"), out_super=None,
+                               super_size=128 << 20, group="qti_dynamic_partitions", remove=["/system/bin/toybox"])
+        stat = subprocess.run(["debugfs", "-R", "stat /system/bin/toybox", m["partitions"]["system_a"]["image"]],
+                              capture_output=True, text=True)
+        self.assertIn("File not found", stat.stderr + stat.stdout)
+        self.assertEqual(m["removed"], ["/system/bin/toybox"])
+        with self.assertRaisesRegex(ValueError, "cannot remove missing /system/nope"):
+            port95_build.build(donor_system=self.donor, vendor=self.p("vendor.img"), odm=self.p("odm.img"),
+                               overlay=self.p("overlay"), props={}, workdir=self.p("work2"), out_super=None,
+                               super_size=128 << 20, group="qti_dynamic_partitions", remove=["/system/nope"])
+
     def test_refuses_to_append_to_a_file_without_selinux_label(self):
         subprocess.run(["debugfs", "-w", "-R", "ea_rm /system/build.prop security.selinux", self.donor],
                        check=True, capture_output=True)

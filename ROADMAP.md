@@ -10,7 +10,7 @@ Compare an existing working One UI port on `pipa` (`B0`) against One UI 9.5 dono
 - **Separation of concerns:** Offline audit, extraction, image modification, and device flashing are strictly separate stages.
 - **Evidence over assumptions:** Version labels, chipsets, or cross-device reports do not count as boot proof.
 
-## Current Status (2026-11-28)
+## Current Status (2026-11-29)
 
 - [x] Set `pipa` (Slot A dual-boot safe) as target.
 - [x] Gathered initial baseline & donor candidates.
@@ -25,6 +25,9 @@ Compare an existing working One UI port on `pipa` (`B0`) against One UI 9.5 dono
 - [x] Executed Gate 6 Boot Attempt 2 & diagnosed `console-ramoops-0`: `erofs_fill_symlink` fixed; halted on `netbpfload` (`netd.o` helper `#122` `bpf_get_netns_cookie`) and EROFS `lz4armv8` `-3901` (`4096→4492`).
 - [x] Applied patches [0002](patches/0002-port95-bpf-allow-bpf_get_netns_cookie-in-sock_ops-and-cgroup_sockopt.patch) & [0003](patches/0003-port95-erofs-use-C-LZ4-decoder-instead-of-lz4armv8-inplace.patch), built `gate6fix` kernel on VPS, passed arm64 QEMU (`bpfloader` Stage 1–3 `rc=0` / `bpf.progs_loaded=1` + EROFS `system_a` verification), packaged `boot_a.img` (`6fb3aba4...`).
 - [x] **Gate 6 Boot Attempt 3 PASSED to One UI 9.5 UI (`M1–M3` verified on hardware)**: `sys.boot_completed=1`, `bpf.progs_loaded=1`, `0` EROFS errors in `dmesg-boot3.txt`, `Permissive`, `/data` f2fs mounted `rw`, Wireless ADB (`uid=0`), Wi-Fi `wlan0`, quad Awinic audio, touch/pen switch, and `sensors@1.0-service` active.
+- [x] Staged Option B offline (NOT YET FLASHED): `artifacts/port95-option-b/system_a.img` (`4,700,540,928` B, `b555d6a9...`, EROFS `metadata+content identical`) + SukiSU test module `artifacts/option-b-test-module/port95_optionb-v1-test.zip` (`2655bcd8...`).
+- [x] Root-caused SukiSU Manager App Profile failure (N0 `kernel/reboot.c` lacked the `ksu_handle_sys_reboot` hook that `libksud.so` uses to fetch the `[ksu_driver]` FD), built `ksureboot` kernel on VPS (`0` errors, no new warnings), and repacked candidate `boot_a-n0-sukisu-bpf-vgate-ksureboot.img` (`39247cd7...`, offline-verified, NOT YET FLASHED).
+- [x] Built standalone Android log collector app `tools/log-reporter/` (`com.pipa.port95.logreporter` → `artifacts/log-reporter/OneUI95-LogReporter.apk`, `20,883` B, v1+v2+v3 signed, untested on hardware).
 - [ ] **Phase 7 (`M4–M6`) hardware & tablet UX bugfixing**: fix phone→tablet UX (`ro.build.characteristics=tablet`, `lcd_density=280`, lockscreen rotation, Quick Settings/Notification width, `floating_feature`), restore stripped Samsung components (`com.samsung.android.lool` Device Care for `Device care`/`Battery`/`Storage`), stop `traced` 5s crash-loop, clean `vold`/RIL/lazy-AIDL noise, and fix USB ADB (`host_connected=false`).
 
 ## Initial Candidates
