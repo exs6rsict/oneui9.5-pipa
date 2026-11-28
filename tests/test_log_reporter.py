@@ -1,6 +1,7 @@
 """OneUI95 Log Reporter: offline checks of manifest, sources and build script, plus the built APK when one
 is found ($LOG_REPORTER_APK, or artifacts/log-reporter/ in this checkout or the main worktree)."""
 import glob, hashlib, os, re, subprocess, unittest, zipfile
+from pathlib import Path
 import xml.etree.ElementTree as ET
 
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
@@ -26,7 +27,7 @@ def code(text, marker):
 
 def java_sources():
     """{file name: text} for every Java source of the app."""
-    return {os.path.basename(p): open(p, encoding="utf-8").read() for p in glob.glob(os.path.join(SRC, "*.java"))}
+    return {os.path.basename(p): Path(p).read_text(encoding="utf-8") for p in glob.glob(os.path.join(SRC, "*.java"))}
 
 
 def find_apk():
